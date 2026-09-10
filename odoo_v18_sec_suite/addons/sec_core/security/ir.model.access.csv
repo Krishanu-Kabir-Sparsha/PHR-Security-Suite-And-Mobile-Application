@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_anomaly_alert_viewer,anomaly.alert viewer,model_anomaly_alert,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_anomaly_alert_compliance,anomaly.alert compliance,model_anomaly_alert,sec_plaza_rbac.group_plaza_compliance,1,1,0,0
+access_anomaly_alert_admin,anomaly.alert admin,model_anomaly_alert,sec_plaza_rbac.group_plaza_admin,1,1,0,0
+access_anomaly_review_viewer,anomaly.review viewer,model_anomaly_review,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_anomaly_review_compliance,anomaly.review compliance,model_anomaly_review,sec_plaza_rbac.group_plaza_compliance,1,0,1,0

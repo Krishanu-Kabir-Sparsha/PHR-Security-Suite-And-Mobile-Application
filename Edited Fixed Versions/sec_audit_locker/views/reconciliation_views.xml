@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_reconciliation_run_list" model="ir.ui.view">
+        <field name="name">audit.reconciliation.run.list</field>
+        <field name="model">audit.reconciliation.run</field>
+        <field name="arch" type="xml">
+            <list string="Reconciliation Runs" create="false"
+                  decoration-danger="verdict in ('primary_missing','mismatch')"
+                  decoration-warning="verdict in ('error','unverifiable')"
+                  decoration-success="verdict == 'match'">
+                <field name="run_at"/>
+                <field name="target_id"/>
+                <field name="verdict"/>
+                <field name="primary_count"/>
+                <field name="replica_count"/>
+                <field name="missing_in_replica"/>
+                <field name="hash_mismatches"/>
+                <field name="missing_in_primary"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_reconciliation_run_form" model="ir.ui.view">
+        <field name="name">audit.reconciliation.run.form</field>
+        <field name="model">audit.reconciliation.run</field>
+        <field name="arch" type="xml">
+            <form string="Reconciliation Run" create="false" edit="false">
+                <sheet>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="verdict != 'primary_missing'">
+                        <strong>Entries exist in the replica that are missing from
+                        the database.</strong> This cannot happen through the
+                        application — deletion of Locker entries is refused for
+                        every role. Preserve the replica before taking any other
+                        action.
+                    </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="verdict != 'unverifiable'">
+                        The replica could not be read, so nothing was compared.
+                        Do not read this run as a pass.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="target_id"/>
+                            <field name="run_at"/>
+                            <field name="run_by_id"/>
+                            <field name="verdict"/>
+                        </group>
+                        <group>
+                            <field name="primary_count"/>
+                            <field name="replica_count"/>
+                            <field name="missing_in_replica"/>
+                            <field name="hash_mismatches"/>
+                            <field name="missing_in_primary"/>
+                        </group>
+                    </group>
+                    <group string="Detail">
+                        <field name="detail" nolabel="1" readonly="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_reconciliation_run" model="ir.actions.act_window">
+        <field name="name">Reconciliation Runs</field>
+        <field name="res_model">audit.reconciliation.run</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_reconcile_now" model="ir.actions.server">
+        <field name="name">Reconcile Locker Now</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <!-- Required: without groups_id, Odoo demands write on
+             audit.locker.entry, which is granted to nobody. See the note on
+             action_verify_chain in locker_views.xml. Reconciliation reads the
+             Locker and creates audit.reconciliation.run rows, which compliance
+             may already create. -->
+        <field name="groups_id"
+               eval="[(4, ref('sec_plaza_rbac.group_plaza_compliance'))]"/>
+        <field name="state">code</field>
+        <!--
+            Reports by returning a notification, NOT by raising. The sandbox
+            has no UserWarning (only UserError), and raising UserError would
+            roll back the audit.reconciliation.run rows this just created,
+            discarding the reconciliation history it exists to produce. The
+            no-target branch matters too: reconcile_all() raises a critical
+            anomaly in that case, which a raise would also throw away.
+        -->
+        <field name="code">
+runs = model.reconcile_all()
+if not runs:
+    title = "Nothing to reconcile"
+    message = "No replication target is configured, so the audit trail has nothing to be reconciled against. A critical anomaly has been recorded."
+    kind = "warning"
+else:
+    title = "Reconciliation complete"
+    message = "\n".join("%s: %s" % (r.target_id.name, r.verdict) for r in runs)
+    kind = "success"
+action = {
+    "type": "ir.actions.client",
+    "tag": "display_notification",
+    "params": {"title": title, "message": message, "type": kind, "sticky": not runs},
+}
+        </field>
+    </record>
+
+    <menuitem id="menu_reconciliation_run"
+              name="Reconciliation"
+              parent="menu_locker"
+              action="action_reconciliation_run"
+              sequence="50"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+    <menuitem id="menu_reconcile_now"
+              name="Reconcile Now"
+              parent="menu_locker"
+              action="action_reconcile_now"
+              sequence="60"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+</odoo>

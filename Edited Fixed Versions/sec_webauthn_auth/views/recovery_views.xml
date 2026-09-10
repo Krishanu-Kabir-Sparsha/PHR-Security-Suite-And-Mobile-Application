@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_recovery_request_list" model="ir.ui.view">
+        <field name="name">sec.webauthn.recovery.request.list</field>
+        <field name="model">sec.webauthn.recovery.request</field>
+        <field name="arch" type="xml">
+            <list string="Break-Glass Recovery Requests"
+                  decoration-danger="state == 'approved'"
+                  decoration-muted="state in ('consumed','rejected','expired')">
+                <field name="requester_id"/>
+                <field name="create_date"/>
+                <field name="approval_count"/>
+                <field name="expires_at"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_recovery_request_form" model="ir.ui.view">
+        <field name="name">sec.webauthn.recovery.request.form</field>
+        <field name="model">sec.webauthn.recovery.request</field>
+        <field name="arch" type="xml">
+            <form string="Break-Glass Recovery Request">
+                <header>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="btn-primary" invisible="state != 'pending'"
+                            confirm="Approving lets this person enrol a new authenticator. Anyone who can add an authenticator to an account can approve in that person's name. Are you satisfied the request is genuine?"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            class="btn-secondary" invisible="state != 'pending'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="pending,approved,consumed"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="state != 'approved'">
+                        An enrolment window is currently open for this user.
+                        Any authenticator they enrol before the window closes
+                        will be able to approve in their name.
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="requester_id"/>
+                            <field name="approval_count"/>
+                        </group>
+                        <group>
+                            <field name="approved_at"/>
+                            <field name="expires_at"/>
+                            <field name="consumed_at"/>
+                            <field name="resulting_credential_id"/>
+                        </group>
+                    </group>
+                    <group string="What Happened">
+                        <field name="reason" nolabel="1"
+                               placeholder="How access to the authenticator was lost."/>
+                    </group>
+                    <group string="Credentials Being Replaced">
+                        <field name="lost_credential_ids" nolabel="1"
+                               widget="many2many_tags"/>
+                    </group>
+                    <notebook>
+                        <page string="Approvals" name="approvals">
+                            <field name="approval_ids" readonly="1">
+                                <list decoration-warning="not strongly_authenticated">
+                                    <field name="approver_id"/>
+                                    <field name="decision"/>
+                                    <field name="decided_at"/>
+                                    <field name="strongly_authenticated"/>
+                                    <field name="source_ip"/>
+                                    <field name="comment"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_recovery_request" model="ir.actions.act_window">
+        <field name="name">Break-Glass Recovery</field>
+        <field name="res_model">sec.webauthn.recovery.request</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_webauthn_recovery"
+              name="Break-Glass Recovery"
+              parent="menu_webauthn"
+              action="action_recovery_request"
+              sequence="30"/>
+
+</odoo>

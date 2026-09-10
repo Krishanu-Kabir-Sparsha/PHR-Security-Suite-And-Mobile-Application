@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    WebAuthn configuration.
+
+    rp_id is deliberately shipped EMPTY. There is no safe default: guessing a
+    domain and having people enrol against it would mean every credential dies
+    when the real domain is chosen. Enrolment refuses to start until it is set.
+-->
+<odoo noupdate="1">
+
+    <record id="param_rp_id" model="ir.config_parameter">
+        <field name="key">sec_webauthn.rp_id</field>
+        <field name="value"></field>
+    </record>
+
+    <record id="param_rp_name" model="ir.config_parameter">
+        <field name="key">sec_webauthn.rp_name</field>
+        <field name="value">Odoo Security Suite</field>
+    </record>
+
+    <record id="param_origin" model="ir.config_parameter">
+        <field name="key">sec_webauthn.origin</field>
+        <field name="value"></field>
+    </record>
+
+    <!-- Local development only. Leaving this True in production means
+         enrolment proceeds over plain HTTP, which browsers will refuse
+         anyway - so it buys nothing and hides the real problem. -->
+    <record id="param_allow_insecure" model="ir.config_parameter">
+        <field name="key">sec_webauthn.allow_insecure_origin</field>
+        <field name="value">False</field>
+    </record>
+
+</odoo>

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="enrolment_page" name="WebAuthn Enrolment">
+        <t t-call="web.layout">
+            <t t-set="head_website">
+                <style>
+                    .wa-wrap { max-width: 760px; margin: 3rem auto; }
+                    .wa-card { background:#fff; border-radius:8px; padding:2.5rem;
+                               box-shadow:0 2px 12px rgba(0,0,0,.08); }
+                    .wa-muted { color:#6c757d; font-size:.9rem; }
+                </style>
+            </t>
+            <div class="wa-wrap">
+                <div class="wa-card">
+                    <h2>Security key enrolment</h2>
+                    <p class="wa-muted">
+                        Enrol a device you will use to approve overrides. Your
+                        fingerprint or face is checked by the device itself and
+                        never leaves it; Odoo only ever stores a public key.
+                    </p>
+
+                    <div t-if="error" class="alert alert-danger" role="alert">
+                        <strong>Enrolment is not available.</strong>
+                        <pre class="mb-0 mt-2" style="white-space:pre-wrap;"><t t-esc="error"/></pre>
+                    </div>
+
+                    <div t-if="not error and not verification_ready"
+                         class="alert alert-warning" role="alert">
+                        Attestation verification is not yet implemented (task P2-2).
+                        You can run the ceremony to confirm your device and browser
+                        work, but the credential will not be stored.
+                    </div>
+
+                    <div t-if="not error">
+                        <p>
+                            Relying Party: <code t-esc="rp_id"/><br/>
+                            Enrolled: <t t-esc="status['enrolled']"/>
+                            of <t t-esc="status['required']"/> required
+                            <t t-if="status['is_nuclear_key']">
+                                (final-approval role: two devices required)
+                            </t>
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label" for="wa_label">Device name</label>
+                            <input type="text" class="form-control" id="wa_label"
+                                   placeholder="e.g. Work phone, or YubiKey on keyring"/>
+                        </div>
+                        <button class="btn btn-primary" id="wa_enrol">Enrol this device</button>
+                        <span id="wa_status" class="ms-3"/>
+                    </div>
+
+                    <div t-if="credentials" class="mt-4">
+                        <h5>Your enrolled devices</h5>
+                        <ul>
+                            <li t-foreach="credentials" t-as="c">
+                                <t t-esc="c.device_label"/>
+                                <span class="wa-muted">
+                                    — enrolled <t t-esc="c.enrolled_at"/>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <script type="text/javascript">
+            (function () {
+                var btn = document.getElementById('wa_enrol');
+                if (!btn) { return; }
+                var statusEl = document.getElementById('wa_status');
+
+                function b64urlToBuf(value) {
+                    var padded = value.replace(/-/g, '+').replace(/_/g, '/');
+                    while (padded.length % 4) { padded += '='; }
+                    var raw = atob(padded);
+                    var buf = new Uint8Array(raw.length);
+                    for (var i = 0; i &lt; raw.length; i++) { buf[i] = raw.charCodeAt(i); }
+                    return buf.buffer;
+                }
+                function bufToB64url(buf) {
+                    var bytes = new Uint8Array(buf), str = '';
+                    for (var i = 0; i &lt; bytes.length; i++) { str += String.fromCharCode(bytes[i]); }
+                    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                }
+                function rpc(url, params) {
+                    return fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({jsonrpc: '2.0', method: 'call', params: params || {}})
+                    }).then(function (r) { return r.json(); }).then(function (payload) {
+                        if (payload.error) { throw new Error(payload.error.data
+                            ? payload.error.data.message : payload.error.message); }
+                        return payload.result;
+                    });
+                }
+
+                btn.addEventListener('click', function () {
+                    statusEl.textContent = 'Waiting for your device…';
+                    if (!window.PublicKeyCredential) {
+                        statusEl.textContent = 'This browser does not support WebAuthn.';
+                        return;
+                    }
+                    rpc('/webauthn/register/options').then(function (options) {
+                        options.challenge = b64urlToBuf(options.challenge);
+                        options.user.id = new TextEncoder().encode(options.user.id);
+                        (options.excludeCredentials || []).forEach(function (c) {
+                            c.id = b64urlToBuf(c.id);
+                        });
+                        return navigator.credentials.create({publicKey: options});
+                    }).then(function (credential) {
+                        return rpc('/webauthn/register/verify', {
+                            device_label: document.getElementById('wa_label').value,
+                            credential: {
+                                id: credential.id,
+                                rawId: bufToB64url(credential.rawId),
+                                type: credential.type,
+                                response: {
+                                    clientDataJSON: bufToB64url(credential.response.clientDataJSON),
+                                    attestationObject: bufToB64url(credential.response.attestationObject)
+                                },
+                                transports: credential.response.getTransports
+                                    ? credential.response.getTransports() : []
+                            }
+                        });
+                    }).then(function (result) {
+                        if (result &amp;&amp; result.ok) {
+                            statusEl.textContent = 'Device enrolled.';
+                            window.location.reload();
+                        } else {
+                            statusEl.textContent = (result &amp;&amp; result.error) || 'Enrolment failed.';
+                        }
+                    }).catch(function (err) {
+                        statusEl.textContent = 'Enrolment failed: ' + err.message;
+                    });
+                });
+            })();
+            </script>
+        </t>
+    </template>
+
+</odoo>

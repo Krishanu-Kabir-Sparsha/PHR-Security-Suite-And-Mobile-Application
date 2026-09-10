@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_anomaly_alert_list" model="ir.ui.view">
+        <field name="name">anomaly.alert.list</field>
+        <field name="model">anomaly.alert</field>
+        <field name="arch" type="xml">
+            <list string="Anomaly Alerts"
+                  decoration-danger="severity == 'critical'"
+                  decoration-warning="severity == 'high'"
+                  decoration-muted="state != 'new'">
+                <field name="raised_at"/>
+                <field name="alert_type"/>
+                <field name="severity"/>
+                <field name="name"/>
+                <field name="user_id"/>
+                <field name="res_model" optional="hide"/>
+                <field name="source_ip" optional="hide"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_anomaly_alert_form" model="ir.ui.view">
+        <field name="name">anomaly.alert.form</field>
+        <field name="model">anomaly.alert</field>
+        <field name="arch" type="xml">
+            <form string="Anomaly Alert">
+                <header>
+                    <button name="action_mark_reviewed" type="object"
+                            string="Mark Reviewed" class="btn-primary"
+                            invisible="state != 'new'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="new,reviewed,escalated"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="alert_type" readonly="1"/>
+                            <field name="severity" readonly="1"/>
+                            <field name="raised_at" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="user_id" readonly="1"/>
+                            <field name="source_ip" readonly="1"/>
+                            <field name="res_model" readonly="1"/>
+                            <field name="res_id" readonly="1"/>
+                            <field name="source_ref" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Reason">
+                        <field name="reason" nolabel="1" readonly="1"/>
+                    </group>
+                    <group string="Review Note (mandatory to close)">
+                        <field name="review_note" nolabel="1"
+                               placeholder="What was concluded, and what action was taken."/>
+                    </group>
+                    <group>
+                        <field name="reviewed_by_id"/>
+                        <field name="reviewed_at"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_anomaly_alert_search" model="ir.ui.view">
+        <field name="name">anomaly.alert.search</field>
+        <field name="model">anomaly.alert</field>
+        <field name="arch" type="xml">
+            <search string="Anomaly Alerts">
+                <field name="name"/>
+                <field name="user_id"/>
+                <filter name="filter_new" string="New" domain="[('state','=','new')]"/>
+                <filter name="filter_critical" string="Critical"
+                        domain="[('severity','in',['high','critical'])]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_type" string="Alert Type"
+                            context="{'group_by':'alert_type'}"/>
+                    <filter name="group_by_user" string="User"
+                            context="{'group_by':'user_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_anomaly_alert" model="ir.actions.act_window">
+        <field name="name">Anomaly Alerts</field>
+        <field name="res_model">anomaly.alert</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_anomaly_alert_search"/>
+        <field name="context">{'search_default_filter_new': 1}</field>
+    </record>
+
+    <menuitem id="menu_surveillance"
+              name="Surveillance"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              sequence="30"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+    <menuitem id="menu_anomaly_alert"
+              name="Anomaly Alerts"
+              parent="menu_surveillance"
+              action="action_anomaly_alert"
+              sequence="10"/>
+
+</odoo>

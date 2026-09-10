@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_anomaly_review_list" model="ir.ui.view">
+        <field name="name">anomaly.review.list</field>
+        <field name="model">anomaly.review</field>
+        <field name="arch" type="xml">
+            <list string="Triage Decisions" create="false"
+                  decoration-warning="bulk">
+                <field name="reviewed_at"/>
+                <field name="alert_id"/>
+                <field name="reviewer_id"/>
+                <field name="outcome"/>
+                <field name="state_before"/>
+                <field name="state_after"/>
+                <field name="bulk"/>
+                <field name="note"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_anomaly_review_search" model="ir.ui.view">
+        <field name="name">anomaly.review.search</field>
+        <field name="model">anomaly.review</field>
+        <field name="arch" type="xml">
+            <search string="Triage Decisions">
+                <field name="reviewer_id"/>
+                <field name="note"/>
+                <filter name="filter_bulk" string="Bulk Reviews"
+                        domain="[('bulk','=',True)]"/>
+                <filter name="filter_benign" string="Dismissed as Benign"
+                        domain="[('outcome','=','benign')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_reviewer" string="Reviewer"
+                            context="{'group_by':'reviewer_id'}"/>
+                    <filter name="group_by_outcome" string="Outcome"
+                            context="{'group_by':'outcome'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_anomaly_review" model="ir.actions.act_window">
+        <field name="name">Triage Decisions</field>
+        <field name="res_model">anomaly.review</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_anomaly_review_search"/>
+    </record>
+
+    <record id="view_anomaly_alert_form_review" model="ir.ui.view">
+        <field name="name">anomaly.alert.form.review</field>
+        <field name="model">anomaly.alert</field>
+        <field name="inherit_id" ref="sec_core.view_anomaly_alert_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_mark_reviewed']" position="after">
+                <button name="action_escalate" type="object" string="Escalate"
+                        class="btn-warning" invisible="state == 'escalated'"/>
+                <button name="action_reopen" type="object" string="Reopen"
+                        class="btn-secondary" invisible="state == 'new'"/>
+            </xpath>
+            <xpath expr="//sheet" position="inside">
+                <notebook>
+                    <page string="Review History" name="reviews">
+                        <field name="review_ids" readonly="1">
+                            <list>
+                                <field name="reviewed_at"/>
+                                <field name="reviewer_id"/>
+                                <field name="outcome"/>
+                                <field name="state_before"/>
+                                <field name="state_after"/>
+                                <field name="bulk"/>
+                                <field name="note"/>
+                            </list>
+                        </field>
+                    </page>
+                </notebook>
+            </xpath>
+        </field>
+    </record>
+
+    <menuitem id="menu_anomaly_review"
+              name="Triage Decisions"
+              parent="menu_surveillance"
+              action="action_anomaly_review"
+              sequence="30"/>
+
+</odoo>

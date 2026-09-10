@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_locker_entry_list" model="ir.ui.view">
+        <field name="name">audit.locker.entry.list</field>
+        <field name="model">audit.locker.entry</field>
+        <field name="arch" type="xml">
+            <list string="Audit Locker" create="false" edit="false" delete="false">
+                <field name="sequence"/>
+                <field name="timestamp_utc"/>
+                <field name="user_login"/>
+                <field name="source_ip" optional="show"/>
+                <field name="model_name"/>
+                <field name="res_id"/>
+                <field name="record_label" optional="show"/>
+                <field name="action_type"/>
+                <field name="external_replica_ref" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_locker_entry_form" model="ir.ui.view">
+        <field name="name">audit.locker.entry.form</field>
+        <field name="model">audit.locker.entry</field>
+        <field name="arch" type="xml">
+            <form string="Audit Locker Entry" create="false" edit="false" delete="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>#<field name="sequence" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Action">
+                            <field name="timestamp_utc"/>
+                            <field name="action_type"/>
+                            <field name="model_name"/>
+                            <field name="res_id"/>
+                            <field name="record_label"/>
+                        </group>
+                        <group string="Actor">
+                            <field name="user_id"/>
+                            <field name="user_login"/>
+                            <field name="source_ip"/>
+                        </group>
+                    </group>
+                    <group string="Field Changes">
+                        <field name="field_changes" nolabel="1" readonly="1"/>
+                    </group>
+                    <group string="Chain">
+                        <field name="prev_hash"/>
+                        <field name="entry_hash"/>
+                        <field name="auditlog_log_id"/>
+                    </group>
+                    <group string="External Replication (P4-1)">
+                        <field name="external_replica_ref"/>
+                        <field name="replicated_at"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_locker_entry_search" model="ir.ui.view">
+        <field name="name">audit.locker.entry.search</field>
+        <field name="model">audit.locker.entry</field>
+        <field name="arch" type="xml">
+            <search string="Audit Locker">
+                <field name="user_login"/>
+                <field name="model_name"/>
+                <field name="res_id"/>
+                <field name="source_ip"/>
+                <filter name="filter_today" string="Today"
+                        domain="[('timestamp_utc','&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter name="filter_deletes" string="Deletions"
+                        domain="[('action_type','=','unlink')]"/>
+                <filter name="filter_unreplicated" string="Not Yet Replicated"
+                        domain="[('external_replica_ref','=',False)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_user" string="User"
+                            context="{'group_by':'user_login'}"/>
+                    <filter name="group_by_model" string="Model"
+                            context="{'group_by':'model_name'}"/>
+                    <filter name="group_by_action" string="Action"
+                            context="{'group_by':'action_type'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_locker_entry" model="ir.actions.act_window">
+        <field name="name">Audit Locker</field>
+        <field name="res_model">audit.locker.entry</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_locker_entry_search"/>
+    </record>
+
+    <record id="action_verify_chain" model="ir.actions.server">
+        <field name="name">Verify Locker Chain Integrity</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <field name="state">code</field>
+        <field name="code">
+result = model.verify_chain()
+raise UserWarning(
+    "Chain intact: %s entries verified." % result["checked"]
+    if result["intact"]
+    else "CHAIN BROKEN at sequence %s: %s" % (result["first_break_sequence"], result["reason"])
+)
+        </field>
+    </record>
+
+    <menuitem id="menu_locker"
+              name="Audit Locker"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              sequence="25"
+              groups="sec_plaza_rbac.group_plaza_viewer"/>
+
+    <menuitem id="menu_locker_entries"
+              name="Locker Entries"
+              parent="menu_locker"
+              action="action_locker_entry"
+              sequence="10"/>
+
+    <menuitem id="menu_locker_verify"
+              name="Verify Chain Integrity"
+              parent="menu_locker"
+              action="action_verify_chain"
+              sequence="20"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+</odoo>

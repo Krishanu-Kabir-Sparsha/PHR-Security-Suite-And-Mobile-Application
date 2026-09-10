@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="action_validate_business_hours" model="ir.actions.server">
+        <field name="name">Check Surveillance Configuration</field>
+        <field name="model_id" ref="model_sec_business_hours"/>
+        <!-- Required: without groups_id, ir.actions.server.run() demands write
+             on sec.business.hours, which the ACL grants to nobody (it is
+             read-only configuration). The action only validates and reports. -->
+        <field name="groups_id"
+               eval="[(4, ref('sec_plaza_rbac.group_plaza_compliance'))]"/>
+        <field name="state">code</field>
+        <!--
+            Reports by returning a notification, NOT by raising. The
+            server-action sandbox provides only UserError, so UserWarning was
+            a NameError. This action is read-only, so a rollback would cost
+            nothing here, but it is written the same way as the Locker actions
+            so the pattern is consistent and nobody copies a raise into an
+            action that does have side effects.
+        -->
+        <field name="code">
+model.validate_configuration()
+coverage = env["sec.value.threshold"].coverage_report()
+window = model.window()
+action = {
+    "type": "ir.actions.client",
+    "tag": "display_notification",
+    "params": {
+        "title": "Surveillance configuration",
+        "message": "Business hours %s:00-%s:00 %s, working days %s.\n\nHigh-value thresholds: %s" % (
+            window[0], window[1], model.timezone(),
+            sorted(model.working_days()), coverage["message"]),
+        "type": "info",
+        "sticky": True,
+    },
+}
+        </field>
+    </record>
+
+    <menuitem id="menu_surveillance_config"
+              name="Check Surveillance Configuration"
+              parent="sec_core.menu_surveillance"
+              action="action_validate_business_hours"
+              sequence="90"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+</odoo>

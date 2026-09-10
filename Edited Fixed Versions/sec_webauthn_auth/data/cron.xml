@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="cron_gc_challenges" model="ir.cron">
+        <field name="name">WebAuthn: clear spent challenges</field>
+        <field name="model_id" ref="model_sec_webauthn_challenge"/>
+        <field name="state">code</field>
+        <field name="code">model.gc_expired()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+    <record id="cron_expire_recovery_grants" model="ir.cron">
+        <field name="name">WebAuthn: expire recovery grants</field>
+        <field name="model_id" ref="model_sec_webauthn_recovery_request"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_expire_grants()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">hours</field>
+        <field name="active" eval="True"/>
+    </record>
+
+</odoo>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_webauthn_credential_list" model="ir.ui.view">
+        <field name="name">sec.webauthn.credential.list</field>
+        <field name="model">sec.webauthn.credential</field>
+        <field name="arch" type="xml">
+            <list string="Enrolled Authenticators" create="false"
+                  decoration-muted="not active">
+                <field name="user_id"/>
+                <field name="device_label"/>
+                <field name="authenticator_type"/>
+                <field name="enrolled_at"/>
+                <field name="last_used_at"/>
+                <field name="sign_counter" optional="hide"/>
+                <field name="rp_id" optional="hide"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_webauthn_credential_form" model="ir.ui.view">
+        <field name="name">sec.webauthn.credential.form</field>
+        <field name="model">sec.webauthn.credential</field>
+        <field name="arch" type="xml">
+            <form string="Authenticator" create="false">
+                <header>
+                    <button name="action_revoke" type="object" string="Revoke"
+                            class="btn-danger" invisible="not active"
+                            confirm="Revoking is immediate and cannot be undone. Re-enrolling a device requires independent multi-party approval. Continue?"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Revoked"
+                            bg_color="text-bg-danger" invisible="active"/>
+                    <group>
+                        <group>
+                            <field name="user_id" readonly="1"/>
+                            <field name="device_label"/>
+                            <field name="authenticator_type"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="enrolled_at"/>
+                            <field name="last_used_at"/>
+                            <field name="sign_counter"/>
+                            <field name="rp_id"/>
+                        </group>
+                    </group>
+                    <group string="Credential">
+                        <field name="credential_id"/>
+                        <field name="aaguid"/>
+                        <field name="transports"/>
+                        <field name="revoked_reason"/>
+                    </group>
+                    <div class="alert alert-info" role="alert">
+                        Only the public key is stored. The private key and any
+                        biometric data remain on the device and never transit
+                        the network.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_webauthn_credential" model="ir.actions.act_window">
+        <field name="name">Enrolled Authenticators</field>
+        <field name="res_model">sec.webauthn.credential</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <record id="action_webauthn_enroll_url" model="ir.actions.act_url">
+        <field name="name">Enrol My Device</field>
+        <field name="url">/webauthn/enroll</field>
+        <field name="target">self</field>
+    </record>
+
+    <menuitem id="menu_webauthn"
+              name="Authenticators"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              sequence="18"/>
+
+    <menuitem id="menu_webauthn_enroll"
+              name="Enrol My Device"
+              parent="menu_webauthn"
+              action="action_webauthn_enroll_url"
+              sequence="10"/>
+
+    <menuitem id="menu_webauthn_credentials"
+              name="All Authenticators"
+              parent="menu_webauthn"
+              action="action_webauthn_credential"
+              sequence="20"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+</odoo>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Default freeze rules.
+
+    noupdate="1": the protected field lists are a business decision the
+    organisation will tune. A module upgrade must never silently change which
+    fields are protected on confirmed records.
+
+    Protected lists cover the fields that carry business meaning. Fields left
+    off remain writable while frozen, on purpose, so that delivery, invoicing
+    and reconciliation continue to work on confirmed documents. Review these
+    lists at the monthly audit; a field omitted here is a field somebody can
+    change on a confirmed record.
+-->
+<odoo noupdate="1">
+
+    <record id="freeze_rule_sale_order" model="sec.freeze.rule">
+        <field name="name">Sales Orders</field>
+        <field name="model_name">sale.order</field>
+        <field name="stream">sales</field>
+        <field name="state_field_path">state</field>
+        <field name="frozen_states">sale,done</field>
+        <field name="protected_fields">partner_id,partner_invoice_id,partner_shipping_id,date_order,validity_date,pricelist_id,currency_id,payment_term_id,company_id,client_order_ref,fiscal_position_id,order_line,amount_untaxed,amount_tax,amount_total</field>
+        <field name="notes">Delivery and invoice status fields are deliberately left writable so that fulfilment continues to work on a confirmed order.</field>
+    </record>
+
+    <record id="freeze_rule_sale_order_line" model="sec.freeze.rule">
+        <field name="name">Sales Order Lines</field>
+        <field name="model_name">sale.order.line</field>
+        <field name="stream">sales</field>
+        <field name="state_field_path">order_id.state</field>
+        <field name="frozen_states">sale,done</field>
+        <field name="protected_fields">product_id,product_uom_qty,product_uom,price_unit,discount,tax_id,name,price_subtotal,price_total</field>
+        <field name="notes">qty_delivered and qty_invoiced stay writable; they are fulfilment facts, not the commercial terms.</field>
+    </record>
+
+    <record id="freeze_rule_purchase_order" model="sec.freeze.rule">
+        <field name="name">Purchase Orders</field>
+        <field name="model_name">purchase.order</field>
+        <field name="stream">purchase</field>
+        <field name="state_field_path">state</field>
+        <field name="frozen_states">purchase,done</field>
+        <field name="protected_fields">partner_id,partner_ref,date_order,date_planned,currency_id,payment_term_id,fiscal_position_id,company_id,order_line,amount_untaxed,amount_tax,amount_total</field>
+        <field name="notes">Receipt status fields stay writable so goods receipt continues to work.</field>
+    </record>
+
+    <record id="freeze_rule_purchase_order_line" model="sec.freeze.rule">
+        <field name="name">Purchase Order Lines</field>
+        <field name="model_name">purchase.order.line</field>
+        <field name="stream">purchase</field>
+        <field name="state_field_path">order_id.state</field>
+        <field name="frozen_states">purchase,done</field>
+        <field name="protected_fields">product_id,product_qty,product_uom,price_unit,taxes_id,name,price_subtotal,price_total</field>
+        <field name="notes">qty_received and qty_invoiced stay writable.</field>
+    </record>
+
+    <record id="freeze_rule_account_move" model="sec.freeze.rule">
+        <field name="name">Accounting Entries</field>
+        <field name="model_name">account.move</field>
+        <field name="stream">accounting</field>
+        <field name="state_field_path">state</field>
+        <field name="frozen_states">posted</field>
+        <field name="protected_fields">partner_id,invoice_date,invoice_date_due,date,journal_id,currency_id,invoice_payment_term_id,fiscal_position_id,company_id,line_ids,invoice_line_ids,ref,amount_untaxed,amount_tax,amount_total</field>
+        <field name="notes">Odoo already restricts posted entries and offers hash-chain inalterability; this rule is defence in depth, not a replacement. payment_state stays writable so reconciliation works.</field>
+    </record>
+
+    <record id="freeze_rule_account_move_line" model="sec.freeze.rule">
+        <field name="name">Accounting Entry Lines</field>
+        <field name="model_name">account.move.line</field>
+        <field name="stream">accounting</field>
+        <field name="state_field_path">move_id.state</field>
+        <field name="frozen_states">posted</field>
+        <field name="protected_fields">account_id,partner_id,name,quantity,price_unit,discount,debit,credit,balance,tax_ids,product_id,analytic_distribution</field>
+        <field name="notes">Reconciliation fields (matching_number, reconciled, amount_residual) stay writable.</field>
+    </record>
+
+</odoo>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_sec_edit_request_list" model="ir.ui.view">
+        <field name="name">sec.edit.request.list</field>
+        <field name="model">sec.edit.request</field>
+        <field name="arch" type="xml">
+            <list string="Manual Edit Requests">
+                <field name="name"/>
+                <field name="requester_id"/>
+                <field name="instruction_type"/>
+                <field name="documentation_complete"/>
+                <field name="submitted_at"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_sec_edit_request_form" model="ir.ui.view">
+        <field name="name">sec.edit.request.form</field>
+        <field name="model">sec.edit.request</field>
+        <field name="arch" type="xml">
+            <form string="Manual Edit Request">
+                <header>
+                    <button name="action_submit" type="object" string="Submit"
+                            class="btn-primary"
+                            invisible="state != 'draft' or not documentation_complete"/>
+                    <button name="action_submit" type="object" string="Submit"
+                            class="btn-secondary"
+                            invisible="state != 'draft' or documentation_complete"
+                            confirm="Required documentation is missing. Submitting will be blocked and the attempt will be reported to the System Monitor. Continue?"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,submitted,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Request">
+                            <field name="requester_id"/>
+                            <field name="target_model"/>
+                            <field name="target_record_id"/>
+                            <field name="submitted_at"/>
+                        </group>
+                        <group string="Instruction Provenance">
+                            <field name="instruction_type"/>
+                            <field name="instructing_person_id"
+                                   required="instruction_type == 'oral'"/>
+                            <field name="documentation_complete"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="instruction_type != 'oral'">
+                        An oral instruction requires the name of the instructing
+                        supervisor and an attached voice note, memo or scanned
+                        document before it can be submitted.
+                    </div>
+                    <group string="Justification">
+                        <field name="justification" nolabel="1"
+                               placeholder="Why this edit is needed."/>
+                    </group>
+                    <group string="Supporting Documentation">
+                        <field name="attachment_ids" nolabel="1" widget="many2many_binary"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_sec_edit_request" model="ir.actions.act_window">
+        <field name="name">Manual Edit Requests</field>
+        <field name="res_model">sec.edit.request</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_edit_request"
+              name="Manual Edit Requests"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              action="action_sec_edit_request"
+              sequence="8"/>
+
+</odoo>

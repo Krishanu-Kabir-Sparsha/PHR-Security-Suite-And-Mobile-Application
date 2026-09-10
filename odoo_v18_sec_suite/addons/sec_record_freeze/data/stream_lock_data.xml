@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Stream lock records, created UNLOCKED.
+
+    noupdate="1" so that a module upgrade can never re-lock (or silently
+    unlock) a production stream.
+-->
+<odoo noupdate="1">
+
+    <record id="stream_lock_sales" model="sec.stream.lock">
+        <field name="stream">sales</field>
+        <field name="locked" eval="False"/>
+    </record>
+
+    <record id="stream_lock_purchase" model="sec.stream.lock">
+        <field name="stream">purchase</field>
+        <field name="locked" eval="False"/>
+    </record>
+
+    <record id="stream_lock_accounting" model="sec.stream.lock">
+        <field name="stream">accounting</field>
+        <field name="locked" eval="False"/>
+    </record>
+
+    <!--
+        Phase 1 only. WebAuthn confirmation of a toggle (US-3.2) cannot be
+        performed until P2-2 exists. While this is True, toggles proceed and are
+        recorded as NOT strongly authenticated. Set it to False the moment
+        sec_webauthn_auth is deployed.
+    -->
+    <record id="param_allow_weak_toggle" model="ir.config_parameter">
+        <field name="key">sec_record_freeze.allow_toggle_without_webauthn</field>
+        <field name="value">True</field>
+    </record>
+
+</odoo>

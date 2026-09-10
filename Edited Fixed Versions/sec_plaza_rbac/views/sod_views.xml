@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_sod_scan_list" model="ir.ui.view">
+        <field name="name">plaza.sod.scan.list</field>
+        <field name="model">plaza.sod.scan</field>
+        <field name="arch" type="xml">
+            <list string="Segregation of Duties Scans" decoration-danger="conflict_count &gt; 0" decoration-success="clean">
+                <field name="name"/>
+                <field name="run_on"/>
+                <field name="run_by_id"/>
+                <field name="users_scanned"/>
+                <field name="conflict_count"/>
+                <field name="clean"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_sod_scan_form" model="ir.ui.view">
+        <field name="name">plaza.sod.scan.form</field>
+        <field name="model">plaza.sod.scan</field>
+        <field name="arch" type="xml">
+            <form string="Segregation of Duties Scan">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="run_on"/>
+                            <field name="run_by_id"/>
+                        </group>
+                        <group>
+                            <field name="users_scanned"/>
+                            <field name="conflict_count"/>
+                            <field name="clean"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Conflicts" name="conflicts">
+                            <field name="conflict_ids" readonly="1">
+                                <list>
+                                    <field name="user_id"/>
+                                    <field name="transaction_type"/>
+                                    <field name="create_role_ids" widget="many2many_tags"/>
+                                    <field name="approve_role_ids" widget="many2many_tags"/>
+                                    <field name="state"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_sod_conflict_list" model="ir.ui.view">
+        <field name="name">plaza.sod.conflict.list</field>
+        <field name="model">plaza.sod.conflict</field>
+        <field name="arch" type="xml">
+            <list string="Segregation of Duties Conflicts" decoration-danger="state == 'open'">
+                <field name="user_id"/>
+                <field name="transaction_type"/>
+                <field name="create_role_ids" widget="many2many_tags"/>
+                <field name="approve_role_ids" widget="many2many_tags"/>
+                <field name="detected_on"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_sod_conflict_form" model="ir.ui.view">
+        <field name="name">plaza.sod.conflict.form</field>
+        <field name="model">plaza.sod.conflict</field>
+        <field name="arch" type="xml">
+            <form string="Segregation of Duties Conflict">
+                <header>
+                    <button name="action_accept_risk"
+                            type="object"
+                            string="Accept as Residual Risk"
+                            class="btn-warning"
+                            invisible="state != 'open'"
+                            confirm="This conflict will be recorded as accepted residual risk and reported to the CEO/Owner each month. Continue?"/>
+                    <field name="state" widget="statusbar" statusbar_visible="open,accepted,remediated"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="user_id"/>
+                            <field name="transaction_type"/>
+                            <field name="detected_on"/>
+                        </group>
+                        <group>
+                            <field name="scan_id"/>
+                            <field name="accepted_by_id"/>
+                        </group>
+                    </group>
+                    <group string="Conflicting Roles">
+                        <field name="create_role_ids" widget="many2many_tags" readonly="1"/>
+                        <field name="approve_role_ids" widget="many2many_tags" readonly="1"/>
+                    </group>
+                    <group string="Acceptance / Remediation Note">
+                        <field name="acceptance_note" nolabel="1"
+                               placeholder="Required before a conflict can be accepted as residual risk."/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_sod_conflict_search" model="ir.ui.view">
+        <field name="name">plaza.sod.conflict.search</field>
+        <field name="model">plaza.sod.conflict</field>
+        <field name="arch" type="xml">
+            <search string="SoD Conflicts">
+                <field name="user_id"/>
+                <filter name="filter_open" string="Open" domain="[('state','=','open')]"/>
+                <filter name="filter_accepted" string="Accepted Risk" domain="[('state','=','accepted')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_transaction" string="Transaction Class"
+                            context="{'group_by':'transaction_type'}"/>
+                    <filter name="group_by_user" string="User"
+                            context="{'group_by':'user_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_sod_scan" model="ir.actions.act_window">
+        <field name="name">SoD Scans</field>
+        <field name="res_model">plaza.sod.scan</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_sod_conflict" model="ir.actions.act_window">
+        <field name="name">SoD Conflicts</field>
+        <field name="res_model">plaza.sod.conflict</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_sod_conflict_search"/>
+        <field name="context">{'search_default_filter_open': 1}</field>
+    </record>
+
+    <record id="action_run_sod_scan" model="ir.actions.server">
+        <field name="name">Run Segregation of Duties Scan</field>
+        <field name="model_id" ref="model_plaza_sod_scan"/>
+        <!-- Stated explicitly rather than relying on the write ACL of
+             plaza.sod.scan. Without groups_id, ir.actions.server.run() gates
+             the action on write access to its own model, which happens to
+             grant Compliance today; the effective permission is unchanged, but
+             it now says so instead of depending on an ACL row that could be
+             tightened for unrelated reasons and silently disable the scan. -->
+        <field name="groups_id"
+               eval="[(4, ref('group_plaza_compliance'))]"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_run_scan()</field>
+    </record>
+
+</odoo>

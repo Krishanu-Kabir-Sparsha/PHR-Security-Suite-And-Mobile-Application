@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="declaration_page" name="Unified Declaration">
+        <t t-call="web.layout">
+            <t t-set="head_website">
+                <style>
+                    body { background: #f4f5f7; }
+                    .decl-wrap { max-width: 860px; margin: 3rem auto; }
+                    .decl-card { background: #fff; border-radius: 8px; padding: 2.5rem;
+                                 box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+                    .decl-body { max-height: 55vh; overflow-y: auto; border: 1px solid #dee2e6;
+                                 padding: 1.5rem; border-radius: 4px; background: #fcfcfd; }
+                    .decl-meta { font-size: .85rem; color: #6c757d; }
+                </style>
+            </t>
+            <div class="decl-wrap">
+                <div class="decl-card">
+                    <h2 t-esc="version.name"/>
+                    <p class="decl-meta">
+                        Version <t t-esc="version.version"/>
+                        &amp;#8226; effective <t t-esc="version.effective_date"/>
+                        &amp;#8226; <t t-esc="user.name"/>
+                    </p>
+
+                    <div t-if="error" class="alert alert-danger" role="alert">
+                        <t t-esc="error"/>
+                    </div>
+
+                    <div class="decl-body" t-raw="body"/>
+
+                    <form action="/declaration/accept" method="post" class="mt-4">
+                        <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox"
+                                   name="accept" value="1" id="decl_accept"/>
+                            <label class="form-check-label" for="decl_accept">
+                                I have read and accept the declaration above.
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            Accept and continue
+                        </button>
+                        <a href="/web/session/logout" class="btn btn-link">Log out</a>
+                    </form>
+
+                    <p class="decl-meta mt-4 mb-0">
+                        Your acceptance is recorded with your user account, the time,
+                        your IP address, and a cryptographic hash of this exact text.
+                    </p>
+                </div>
+            </div>
+        </t>
+    </template>
+
+</odoo>

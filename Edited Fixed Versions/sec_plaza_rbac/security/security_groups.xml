@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="module_category_security_suite" model="ir.module.category">
+        <field name="name">Security Suite</field>
+        <field name="description">Access levels for the Odoo CE V18 Advanced Security, Access Control and Immutable Audit System.</field>
+        <field name="sequence">5</field>
+    </record>
+
+    <!-- Read-only visibility of the role catalog. -->
+    <record id="group_plaza_viewer" model="res.groups">
+        <field name="name">Plaza RBAC / Viewer</field>
+        <field name="category_id" ref="module_category_security_suite"/>
+        <field name="comment">May view the Plaza Model role catalog and access matrix, but change nothing.</field>
+    </record>
+
+    <!-- Compliance function: runs and reviews SoD scans. -->
+    <record id="group_plaza_compliance" model="res.groups">
+        <field name="name">Plaza RBAC / Compliance Officer</field>
+        <field name="category_id" ref="module_category_security_suite"/>
+        <field name="implied_ids" eval="[(4, ref('group_plaza_viewer'))]"/>
+        <field name="comment">May run segregation-of-duties scans, review conflicts, and accept residual risk with a written justification.</field>
+    </record>
+
+    <!-- Software Administrator: day-to-day role assignment only. -->
+    <record id="group_plaza_admin" model="res.groups">
+        <field name="name">Plaza RBAC / Catalog Administrator</field>
+        <field name="category_id" ref="module_category_security_suite"/>
+        <field name="implied_ids" eval="[(4, ref('group_plaza_compliance'))]"/>
+        <field name="comment">May maintain the role catalog and access matrix and raise grant exceptions. Explicitly does NOT confer the ability to alter frozen records or audit log entries (BRD Section 5).</field>
+    </record>
+
+    <!--
+        Suite-wide Super Admin. Defined here because sec_plaza_rbac is the
+        foundation module every other module in the suite depends on; the
+        record-freeze lock toggles (US-3.2) reference this group in Phase 1.
+    -->
+    <record id="group_security_super_admin" model="res.groups">
+        <field name="name">Security Suite / Super Administrator</field>
+        <field name="category_id" ref="module_category_security_suite"/>
+        <field name="implied_ids" eval="[(4, ref('group_plaza_admin'))]"/>
+        <field name="comment">Highest privilege in the security suite: may approve grant exceptions and, from Phase 1, toggle the Sales/Purchase back-end locks subject to WebAuthn confirmation. Assignment to this group is itself an audited event.</field>
+    </record>
+
+</odoo>

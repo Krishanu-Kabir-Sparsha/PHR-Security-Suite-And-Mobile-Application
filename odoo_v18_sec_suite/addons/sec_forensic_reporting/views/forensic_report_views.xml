@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_forensic_report_list" model="ir.ui.view">
+        <field name="name">forensic.report.list</field>
+        <field name="model">forensic.report</field>
+        <field name="arch" type="xml">
+            <list string="Forensic Reports"
+                  decoration-danger="finding_count &gt; 0 or not chain_intact"
+                  decoration-success="state == 'generated' and finding_count == 0">
+                <field name="name"/>
+                <field name="period_start"/>
+                <field name="period_end"/>
+                <field name="version"/>
+                <field name="override_count"/>
+                <field name="override_oral_count"/>
+                <field name="anomaly_count"/>
+                <field name="finding_count"/>
+                <field name="chain_intact"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_forensic_report_form" model="ir.ui.view">
+        <field name="name">forensic.report.form</field>
+        <field name="model">forensic.report</field>
+        <field name="arch" type="xml">
+            <form string="Forensic Report">
+                <header>
+                    <button name="action_render_pdf" type="object"
+                            string="Download PDF" class="btn-primary"
+                            invisible="state != 'generated'"/>
+                    <button name="action_generate" type="object"
+                            string="Generate" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Chain Broken"
+                            bg_color="text-bg-danger" invisible="chain_intact"/>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                        <h4>
+                            <field name="period_start" readonly="1"/> to
+                            <field name="period_end" readonly="1"/>
+                            (v<field name="version" readonly="1" class="oe_inline"/>)
+                        </h4>
+                    </div>
+
+                    <div class="alert alert-danger" role="alert"
+                         invisible="finding_count == 0">
+                        <strong><field name="finding_count" class="oe_inline"/>
+                        control finding(s) this period.</strong>
+                        <pre style="white-space:pre-wrap;" class="mb-0 mt-2"><field name="findings_text" readonly="1" nolabel="1"/></pre>
+                    </div>
+                    <div class="alert alert-success" role="alert"
+                         invisible="finding_count &gt; 0 or state == 'draft'">
+                        No control findings for this period.
+                    </div>
+
+                    <group>
+                        <group string="Activity">
+                            <field name="override_count"/>
+                            <field name="override_oral_count"/>
+                            <field name="anomaly_count"/>
+                            <field name="anomaly_open_high"/>
+                        </group>
+                        <group string="Control Status">
+                            <field name="chain_intact"/>
+                            <field name="sod_conflict_count"/>
+                            <field name="declaration_outstanding"/>
+                            <field name="generated_at"/>
+                            <field name="generated_by_id"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Collected Data" name="payload">
+                            <field name="payload_json" widget="text" readonly="1"/>
+                        </page>
+                    </notebook>
+                    <group string="Integrity and Versioning">
+                        <group>
+                            <field name="payload_hash"/>
+                            <field name="integrity_ok"/>
+                            <field name="is_current"/>
+                        </group>
+                        <group>
+                            <field name="pdf_rendered_at"/>
+                            <field name="pdf_hash"/>
+                            <field name="supersedes_id"/>
+                            <field name="superseded_by_id"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="integrity_ok">
+                        The stored data of this report no longer matches the hash
+                        recorded when it was generated. A generated report cannot
+                        be edited through the application, so this indicates a
+                        change made below it. Treat as a security incident.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_forensic_report" model="ir.actions.act_window">
+        <field name="name">Forensic Reports</field>
+        <field name="res_model">forensic.report</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_generate_report_now" model="ir.actions.server">
+        <field name="name">Generate Report for Last Month</field>
+        <field name="model_id" ref="model_forensic_report"/>
+        <field name="state">code</field>
+        <field name="code">action = {
+    "type": "ir.actions.act_window",
+    "res_model": "forensic.report",
+    "res_id": model.cron_generate_monthly().id,
+    "view_mode": "form",
+}</field>
+    </record>
+
+    <menuitem id="menu_forensic"
+              name="Forensic Reporting"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              sequence="40"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+    <menuitem id="menu_forensic_reports"
+              name="Reports"
+              parent="menu_forensic"
+              action="action_forensic_report"
+              sequence="10"/>
+
+    <menuitem id="menu_forensic_generate"
+              name="Generate for Last Month"
+              parent="menu_forensic"
+              action="action_generate_report_now"
+              sequence="20"/>
+
+</odoo>

@@ -1,0 +1,13 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_role_plaza_model_viewer,role.plaza_model viewer,model_role_plaza_model,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_role_plaza_model_admin,role.plaza_model admin,model_role_plaza_model,sec_plaza_rbac.group_plaza_admin,1,1,1,0
+access_role_plaza_model_access_viewer,role.plaza_model.access viewer,model_role_plaza_model_access,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_role_plaza_model_access_admin,role.plaza_model.access admin,model_role_plaza_model_access,sec_plaza_rbac.group_plaza_admin,1,1,1,1
+access_plaza_sod_scan_compliance,plaza.sod.scan compliance,model_plaza_sod_scan,sec_plaza_rbac.group_plaza_compliance,1,1,1,0
+access_plaza_sod_scan_viewer,plaza.sod.scan viewer,model_plaza_sod_scan,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_plaza_sod_conflict_compliance,plaza.sod.conflict compliance,model_plaza_sod_conflict,sec_plaza_rbac.group_plaza_compliance,1,1,1,0
+access_plaza_sod_conflict_viewer,plaza.sod.conflict viewer,model_plaza_sod_conflict,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_plaza_grant_exception_admin,plaza.grant.exception admin,model_plaza_grant_exception,sec_plaza_rbac.group_plaza_admin,1,1,1,0
+access_plaza_grant_exception_viewer,plaza.grant.exception viewer,model_plaza_grant_exception,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_ir_model_plaza_viewer,ir.model read for access matrix picker,base.model_ir_model,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
+access_ir_module_module_plaza_viewer,ir.module.module read for access matrix picker,base.model_ir_module_module,sec_plaza_rbac.group_plaza_viewer,1,0,0,0

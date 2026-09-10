@@ -1,0 +1,38 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock.bak
+*.iml
+.idea/
+.vscode/
+
+# Generated code — recreated by `dart run build_runner build`
+*.g.dart
+*.freezed.dart
+
+# Platform folders are NOT committed.
+#
+# They are `flutter create` output, they differ between Flutter versions, and
+# committing them produces a merge conflict on every SDK bump. Perfect HR's
+# required customisation (INTERNET in the main manifest, minSdk 23,
+# appAuthRedirectScheme, permissions) is applied instead by the idempotent
+# scripts/configure_android.py, which runs in CI and in scripts/build_apk.sh.
+#
+# REVISIT THIS when branding lands (Project State Q6) or release signing is
+# configured. App icons and launch images are binary assets a script cannot
+# generate; the intended answer is `flutter_launcher_icons` driven from
+# assets/, but if that proves awkward, committing android/ and ios/ becomes the
+# better trade and this decision should be reversed deliberately.
+android/
+ios/
+
+# Secrets — never commit
+*.jks
+*.keystore
+key.properties
+google-services.json
+GoogleService-Info.plist
+.env

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Audit scope.
+
+    Deliberately selective. BRD Section 9 risk 6 and PRD risk 5 both warn that
+    logging every field on every model at production volume degrades write
+    latency; PRD Section 9 sets a 100ms ceiling on audit overhead per save.
+    Read logging is OFF everywhere: it multiplies volume enormously and no
+    requirement asks for it.
+
+    log_type "fast" records only the fields that actually changed, which is
+    both what FR-4.1 asks for and the cheaper option.
+
+    noupdate="1" so that upgrades cannot silently widen or narrow audit scope.
+-->
+<odoo noupdate="1">
+
+    <record id="rule_sale_order" model="auditlog.rule">
+        <field name="name">Locker: Sales Orders</field>
+        <field name="model_id" ref="sale.model_sale_order"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_sale_order_line" model="auditlog.rule">
+        <field name="name">Locker: Sales Order Lines</field>
+        <field name="model_id" ref="sale.model_sale_order_line"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_purchase_order" model="auditlog.rule">
+        <field name="name">Locker: Purchase Orders</field>
+        <field name="model_id" ref="purchase.model_purchase_order"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_purchase_order_line" model="auditlog.rule">
+        <field name="name">Locker: Purchase Order Lines</field>
+        <field name="model_id" ref="purchase.model_purchase_order_line"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_account_move" model="auditlog.rule">
+        <field name="name">Locker: Accounting Entries</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_account_move_line" model="auditlog.rule">
+        <field name="name">Locker: Accounting Entry Lines</field>
+        <field name="model_id" ref="account.model_account_move_line"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">fast</field>
+        <field name="state">draft</field>
+    </record>
+
+    <!--
+        The controls themselves are audited. US-3.2 requires stream lock
+        toggles to reach the Locker; the same argument applies to the freeze
+        configuration, the role catalog and the declaration register, since
+        weakening a control is a more valuable act to an attacker than editing
+        any single order.
+    -->
+    <record id="rule_stream_lock" model="auditlog.rule">
+        <field name="name">Locker: Back-end Stream Locks</field>
+        <field name="model_id" ref="sec_record_freeze.model_sec_stream_lock"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">full</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_freeze_rule" model="auditlog.rule">
+        <field name="name">Locker: Record Freeze Rules</field>
+        <field name="model_id" ref="sec_record_freeze.model_sec_freeze_rule"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">full</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_plaza_role" model="auditlog.rule">
+        <field name="name">Locker: Plaza Role Catalog</field>
+        <field name="model_id" ref="sec_plaza_rbac.model_role_plaza_model"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">full</field>
+        <field name="state">draft</field>
+    </record>
+
+    <record id="rule_declaration_version" model="auditlog.rule">
+        <field name="name">Locker: Declaration Versions</field>
+        <field name="model_id" ref="sec_declaration_gateway.model_declaration_version"/>
+        <field name="log_read" eval="False"/>
+        <field name="log_create" eval="True"/>
+        <field name="log_write" eval="True"/>
+        <field name="log_unlink" eval="True"/>
+        <field name="log_type">full</field>
+        <field name="state">draft</field>
+    </record>
+
+</odoo>

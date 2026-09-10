@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <menuitem id="menu_security_suite_root"
+              name="Security Suite"
+              sequence="15"
+              groups="sec_plaza_rbac.group_plaza_viewer"/>
+
+    <menuitem id="menu_plaza_rbac"
+              name="Plaza RBAC"
+              parent="menu_security_suite_root"
+              sequence="10"/>
+
+    <menuitem id="menu_plaza_role_catalog"
+              name="Role Catalog"
+              parent="menu_plaza_rbac"
+              action="action_plaza_role"
+              sequence="10"/>
+
+    <menuitem id="menu_plaza_grant_exception"
+              name="Grant Exceptions"
+              parent="menu_plaza_rbac"
+              action="action_grant_exception"
+              sequence="20"
+              groups="sec_plaza_rbac.group_plaza_admin"/>
+
+    <menuitem id="menu_sod"
+              name="Segregation of Duties"
+              parent="menu_security_suite_root"
+              sequence="20"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+    <menuitem id="menu_sod_run"
+              name="Run SoD Scan"
+              parent="menu_sod"
+              action="action_run_sod_scan"
+              sequence="10"/>
+
+    <menuitem id="menu_sod_conflicts"
+              name="Conflicts"
+              parent="menu_sod"
+              action="action_sod_conflict"
+              sequence="20"/>
+
+    <menuitem id="menu_sod_scans"
+              name="Scan History"
+              parent="menu_sod"
+              action="action_sod_scan"
+              sequence="30"/>
+
+</odoo>

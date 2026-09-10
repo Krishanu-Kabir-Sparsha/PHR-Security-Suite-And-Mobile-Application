@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="cron_verify_locker_chain" model="ir.cron">
+        <field name="name">Audit Locker: verify hash chain</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_verify_chain()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+
+    <!--
+        OCA auditlog ships an autovacuum cron that purges logs older than N
+        days. It is inactive upstream by default and must stay inactive:
+        FR-4.2 forbids deletion, and unlink() on auditlog.log raises anyway, so
+        an active cron would only produce daily failures. Asserted here so the
+        state is deliberate rather than inherited.
+    -->
+    <record id="auditlog.ir_cron_auditlog_autovacuum" model="ir.cron">
+        <field name="active" eval="False"/>
+    </record>
+
+
+    <record id="cron_replicate_locker" model="ir.cron">
+        <field name="name">Audit Locker: replicate to external store</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_replicate()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="True"/>
+    </record>
+
+    <record id="cron_replication_backlog" model="ir.cron">
+        <field name="name">Audit Locker: check replication backlog</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_check_replication_backlog()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">hours</field>
+        <field name="active" eval="True"/>
+    </record>
+
+
+    <record id="cron_reconcile_locker" model="ir.cron">
+        <field name="name">Audit Locker: reconcile against replica</field>
+        <field name="model_id" ref="model_audit_locker_entry"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_reconcile()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+
+</odoo>

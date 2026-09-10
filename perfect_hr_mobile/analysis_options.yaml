@@ -1,0 +1,45 @@
+# Static analysis for Perfect HR Mobile.
+# Instructions §29 — production-quality code, strong typing, no magic values.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Treat as errors: these correlate with real defects in this codebase.
+    always_use_package_imports: ignore
+    missing_required_param: error
+    missing_return: error
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+    invalid_use_of_protected_member: error
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "build/**"
+    - android/**
+    - ios/**
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_print
+    - avoid_relative_lib_imports
+    - avoid_unnecessary_containers
+    - await_only_futures
+    - camel_case_types
+    - cancel_subscriptions
+    - close_sinks
+    - directives_ordering
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_locals
+    - prefer_single_quotes
+    - require_trailing_commas
+    - sort_child_properties_last
+    - unawaited_futures
+    - use_build_context_synchronously
+    - use_super_parameters

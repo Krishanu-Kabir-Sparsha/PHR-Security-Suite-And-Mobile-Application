@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="cron_monthly_forensic_report" model="ir.cron">
+        <field name="name">Forensic: generate monthly report</field>
+        <field name="model_id" ref="model_forensic_report"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_generate_monthly()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">months</field>
+        <field name="active" eval="True"/>
+    </record>
+
+    <record id="cron_verify_report_integrity" model="ir.cron">
+        <field name="name">Forensic: verify report integrity</field>
+        <field name="model_id" ref="model_forensic_report"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_verify_integrity()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+
+</odoo>

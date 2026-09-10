@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Placeholder declaration version.
+
+    It is created in DRAFT and NOT approved by legal, so the gate stays dormant
+    on install: with no PUBLISHED version, must_accept_declaration is False for
+    everyone and nobody is locked out.
+
+    The body deliberately contains no declaration language. Engineering must not
+    draft this text (BRD Section 11, PRD Section 5.2), and BRD Section 9 risk 4
+    specifically warns that the family-liability clause in the source
+    instructions is unlikely to be enforceable and must not be deployed as
+    drafted. Legal Counsel replaces the body, sets approved_by_legal, records
+    the reviewer, and only then presses Publish.
+-->
+<odoo noupdate="1">
+
+    <record id="declaration_version_placeholder" model="declaration.version">
+        <field name="name">Unified Declaration &amp; NDA+ (PLACEHOLDER — NOT FOR USE)</field>
+        <field name="version">0.0-placeholder</field>
+        <field name="effective_date">2000-01-01</field>
+        <field name="state">draft</field>
+        <field name="approved_by_legal" eval="False"/>
+        <field name="is_material_update" eval="True"/>
+        <field name="body_html"><![CDATA[
+<div class="alert alert-warning">
+  <p><strong>This is a placeholder. It contains no declaration text and must not be published.</strong></p>
+  <p>Legal Counsel supplies the approved wording here, sets "Approved by Legal
+     Counsel", records the reviewer's name, and then publishes a new version.
+     Publishing forces every active user to accept before reaching the dashboard.</p>
+  <p>Engineering does not draft this content.</p>
+</div>
+        ]]></field>
+    </record>
+
+</odoo>

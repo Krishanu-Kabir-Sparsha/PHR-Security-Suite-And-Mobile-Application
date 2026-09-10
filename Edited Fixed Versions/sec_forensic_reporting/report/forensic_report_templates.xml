@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="forensic_report_document">
+        <t t-call="web.external_layout">
+            <t t-set="doc" t-value="doc.with_context(lang='en_US')"/>
+            <t t-set="data" t-value="doc.payload()"/>
+            <div class="page">
+                <h2>Forensic &amp; Compliance Report</h2>
+                <p>
+                    <strong t-esc="doc.name"/> —
+                    period <span t-esc="doc.period_start"/> to
+                    <span t-esc="doc.period_end"/>,
+                    version <span t-esc="doc.version"/>.
+                    Generated <span t-esc="doc.generated_at"/>
+                    by <span t-esc="doc.generated_by_id.name"/>.
+                </p>
+
+                <!-- Findings lead. A report that lists activity while burying
+                     the fact that a control is off reads as assurance. -->
+                <h3>Control Findings</h3>
+                <div t-if="doc.finding_count" class="alert alert-danger">
+                    <p><strong><t t-esc="doc.finding_count"/> finding(s) require attention.</strong></p>
+                    <ul>
+                        <li t-foreach="data.get('findings', [])" t-as="finding">
+                            <t t-esc="finding"/>
+                        </li>
+                    </ul>
+                </div>
+                <p t-if="not doc.finding_count">
+                    No control findings were identified for this period.
+                </p>
+
+                <h3>Overrides</h3>
+                <t t-set="ov" t-value="data.get('overrides') or {}"/>
+                <p>
+                    <t t-esc="ov.get('total', 0)"/> override request(s):
+                    <t t-esc="ov.get('executed', 0)"/> executed,
+                    <t t-esc="ov.get('rejected', 0)"/> rejected.
+                    Instruction source —
+                    written <t t-esc="ov.get('written', 0)"/>,
+                    oral <t t-esc="ov.get('oral', 0)"/>.
+                </p>
+                <table class="table table-sm" t-if="ov.get('rows')">
+                    <thead>
+                        <tr>
+                            <th>Reference</th><th>Record</th><th>Requester</th>
+                            <th>Category</th><th>Instruction</th>
+                            <th>Approvers</th><th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="ov.get('rows', [])" t-as="row">
+                            <td t-esc="row.get('reference')"/>
+                            <td t-esc="row.get('target')"/>
+                            <td t-esc="row.get('requester')"/>
+                            <td t-esc="row.get('category')"/>
+                            <td>
+                                <t t-esc="row.get('instruction_type')"/>
+                                <span t-if="not row.get('documented')"> (undocumented)</span>
+                            </td>
+                            <td t-esc="', '.join(row.get('approvers') or [])"/>
+                            <td t-esc="row.get('state')"/>
+                        </tr>
+                    </tbody>
+                </table>
+                <p t-if="not ov.get('rows')">No overrides were requested in this period.</p>
+
+                <h3>Declaration Reconciliation</h3>
+                <t t-set="dec" t-value="data.get('declarations') or {}"/>
+                <p t-if="dec.get('published')">
+                    Version <t t-esc="dec.get('version')"/>;
+                    <t t-esc="dec.get('accepted')"/> acceptance(s) on file;
+                    <t t-esc="dec.get('outstanding')"/> active user(s) outstanding;
+                    <t t-esc="dec.get('hash_mismatches')"/> text-hash mismatch(es).
+                </p>
+                <p t-if="not dec.get('published')">
+                    No declaration version is published.
+                </p>
+
+                <h3>Anomaly Summary</h3>
+                <t t-set="an" t-value="data.get('anomalies') or {}"/>
+                <p>
+                    <t t-esc="an.get('total', 0)"/> alert(s) raised in the period;
+                    <t t-esc="an.get('open_high_or_critical', 0)"/> high or
+                    critical alert(s) currently unreviewed.
+                </p>
+                <table class="table table-sm" t-if="an.get('by_type')">
+                    <thead><tr><th>Type</th><th>Count</th></tr></thead>
+                    <tbody>
+                        <tr t-foreach="an.get('by_type', {}).items()" t-as="pair">
+                            <td t-esc="pair[0]"/><td t-esc="pair[1]"/>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Segregation of Duties</h3>
+                <t t-set="sod" t-value="data.get('segregation_of_duties') or {}"/>
+                <p t-if="sod.get('has_scan')">
+                    Last scan <t t-esc="sod.get('run_on')"/> across
+                    <t t-esc="sod.get('users_scanned')"/> user(s):
+                    <t t-esc="sod.get('open_conflicts')"/> open conflict(s) of
+                    <t t-esc="sod.get('total_conflicts')"/> found.
+                </p>
+                <p t-if="not sod.get('has_scan')">
+                    No segregation-of-duties scan has been run.
+                </p>
+
+                <h3>Control Health</h3>
+                <t t-set="ch" t-value="data.get('control_health') or {}"/>
+                <ul>
+                    <li t-if="ch.get('audit_chain')">
+                        Audit chain:
+                        <t t-if="ch['audit_chain'].get('intact')">intact,
+                            <t t-esc="ch['audit_chain'].get('checked')"/> entries verified</t>
+                        <t t-if="not ch['audit_chain'].get('intact')">
+                            <strong>BROKEN</strong> at sequence
+                            <t t-esc="ch['audit_chain'].get('first_break_sequence')"/></t>
+                    </li>
+                    <li t-if="ch.get('freeze_triggers')">
+                        Database freeze triggers:
+                        <t t-if="ch['freeze_triggers'].get('healthy')">all present</t>
+                        <t t-if="not ch['freeze_triggers'].get('healthy')">
+                            <strong>missing</strong>
+                            <t t-esc="', '.join(ch['freeze_triggers'].get('missing') or [])"/></t>
+                    </li>
+                    <li t-if="ch.get('value_thresholds')">
+                        High-value thresholds:
+                        <t t-esc="ch['value_thresholds'].get('message')"/>
+                    </li>
+                    <li t-if="ch.get('webauthn_enrolment')">
+                        Approver enrolment:
+                        <t t-if="ch['webauthn_enrolment'].get('ready')">complete</t>
+                        <t t-if="not ch['webauthn_enrolment'].get('ready')">
+                            <strong>incomplete</strong></t>
+                    </li>
+                    <li t-if="ch.get('freeze_rules_disabled')">
+                        Freeze enforcement disabled for:
+                        <t t-esc="', '.join(ch.get('freeze_rules_disabled') or []) or 'none'"/>
+                    </li>
+                </ul>
+
+                <p class="text-muted mt-4" style="font-size:0.85em;">
+                    This report is generated from the audit trail and control
+                    configuration at the moment of generation. Where a section
+                    reports that a control is inactive or a figure is unknown,
+                    that statement is itself the finding: an absence of alerts
+                    from a control that was never configured is not evidence of
+                    an absence of events.
+                </p>
+            </div>
+        </t>
+    </template>
+
+    <template id="forensic_report_main">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-call="sec_forensic_reporting.forensic_report_document"/>
+            </t>
+        </t>
+    </template>
+
+</odoo>
