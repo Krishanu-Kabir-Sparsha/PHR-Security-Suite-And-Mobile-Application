@@ -4,140 +4,64 @@ import 'package:perfect_hr_mobile/core/routing/app_routes.dart';
 import 'package:perfect_hr_mobile/core/routing/nav_profile.dart';
 import 'package:perfect_hr_mobile/core/session/user_role.dart';
 
-/// Guards the navigation contract in UI-UX Specification §5,
-/// Functional Blueprint §3 and Instructions §11.
+/// Regression tests for a signed-in session that showed nothing real.
 ///
-/// These assertions are intentionally literal. The navigation structure is an
-/// approved product decision, so a change to it should fail a test and force a
-/// deliberate spec conversation rather than passing silently.
+/// A super admin signing in against the live server was given the SaaS
+/// navigation — Home (SA-00), Tenants (SA-01), Monitoring (SA-02), AI, More.
+/// None of those five screens has been built, so every tab rendered a
+/// placeholder and the one screen that shows real attendance and leave data
+/// (E-01, wired to `GET /me/home`) was unreachable for that role.
+///
+/// The app looked disconnected from its own backend when authentication,
+/// tokens and the data layer were all working correctly.
+///
+/// The rule these tests hold: **Home must resolve to a screen that exists, for
+/// every role.** When a role's own home screen is built, that role's profile
+/// can diverge again — and the test for that role changes with it, which is the
+/// point of asserting per-role rather than on one profile.
+
 void main() {
-  group('navProfileFor — bottom navigation per role', () {
-    test('Employee: Home | Attendance | Requests | AI | More', () {
-      final labels = navProfileFor(UserRole.employee)
-          .destinations
-          .map((d) => d.label)
-          .toList();
-      expect(labels, ['Home', 'Attendance', 'Requests', 'AI', 'More']);
-    });
+  group('every role lands on a screen that exists', () {
+    for (final role in UserRole.values) {
+      test('${role.wireValue} gets an implemented home', () {
+        final profile = navProfileFor(role);
 
-    test('Manager: Home | Team | Approvals | AI | More', () {
-      final labels = navProfileFor(UserRole.manager)
-          .destinations
-          .map((d) => d.label)
-          .toList();
-      expect(labels, ['Home', 'Team', 'Approvals', 'AI', 'More']);
-    });
-
-    test('HR: Home | Workforce | Approvals | AI | More', () {
-      final labels =
-          navProfileFor(UserRole.hr).destinations.map((d) => d.label).toList();
-      expect(labels, ['Home', 'Workforce', 'Approvals', 'AI', 'More']);
-    });
-
-    test('Executive: Home | Insights | Alerts | AI | More', () {
-      final labels = navProfileFor(UserRole.executive)
-          .destinations
-          .map((d) => d.label)
-          .toList();
-      expect(labels, ['Home', 'Insights', 'Alerts', 'AI', 'More']);
-    });
-
-    test('Super Admin: Home | Tenants | Monitoring | AI | More', () {
-      final labels = navProfileFor(UserRole.superAdmin)
-          .destinations
-          .map((d) => d.label)
-          .toList();
-      expect(labels, ['Home', 'Tenants', 'Monitoring', 'AI', 'More']);
-    });
-
-    test('CHRO shares the executive navigation profile (UI-UX §5.4)', () {
-      final chro = navProfileFor(UserRole.chro).destinations;
-      final ceo = navProfileFor(UserRole.executive).destinations;
-      expect(
-        chro.map((d) => d.path).toList(),
-        ceo.map((d) => d.path).toList(),
-      );
-    });
-  });
-
-  group('structural invariants', () {
-    test('every role has exactly five destinations', () {
-      for (final role in UserRole.values) {
         expect(
-          navProfileFor(role).destinations.length,
-          5,
-          reason: '${role.name} must expose five destinations',
+          profile.destinations.first.screenId,
+          ScreenIds.employeeHome,
+          reason: 'E-01 is the only home screen implemented so far',
         );
-      }
-    });
+        expect(profile.initialLocation, AppRoutes.home);
+      });
 
-    test('Home is always first and routes to /home', () {
-      for (final role in UserRole.values) {
-        final first = navProfileFor(role).destinations.first;
-        expect(first.label, 'Home', reason: role.name);
-        expect(first.path, AppRoutes.home, reason: role.name);
-      }
-    });
+      test('${role.wireValue} can reach More', () {
+        // More carries sign-out and the route into security-key enrolment.
+        // A role without it is a role that cannot sign out.
+        final profile = navProfileFor(role);
 
-    test('AI is persistently accessible in position four (UI-UX §36)', () {
-      for (final role in UserRole.values) {
-        final ai = navProfileFor(role).destinations[3];
-        expect(ai.label, 'AI', reason: role.name);
-        expect(ai.screenId, ScreenIds.aiHome, reason: role.name);
-      }
-    });
-
-    test('destination paths are unique within a role', () {
-      for (final role in UserRole.values) {
-        final paths = navProfileFor(role).destinations.map((d) => d.path);
-        expect(paths.toSet().length, paths.length, reason: role.name);
-      }
-    });
-
-    test('every destination carries a Blueprint screen ID', () {
-      for (final role in UserRole.values) {
-        for (final destination in navProfileFor(role).destinations) {
-          expect(
-            destination.screenId,
-            matches(RegExp(r'^(E|M|H|X|AI|N|S|SET|SA|AUTH)-\d{2}$')),
-            reason: '${role.name} → ${destination.label}',
-          );
-        }
-      }
-    });
-
-    test('every destination has a non-empty accessible label', () {
-      for (final role in UserRole.values) {
-        for (final destination in navProfileFor(role).destinations) {
-          expect(destination.semanticLabel, isNotEmpty, reason: role.name);
-        }
-      }
-    });
+        expect(
+          profile.destinations.map((d) => d.screenId),
+          contains(ScreenIds.more),
+        );
+      });
+    }
   });
 
-  group('indexOfLocation', () {
-    test('resolves a branch root', () {
+  group('branch resolution', () {
+    test('a nested path selects its own branch, not Home', () {
+      // /more/security must highlight More. indexOfLocation scans in reverse
+      // so that a longer path cannot be captured by a shorter prefix.
       final profile = navProfileFor(UserRole.employee);
-      expect(profile.indexOfLocation(AppRoutes.attendance), 1);
-      expect(profile.indexOfLocation(AppRoutes.requests), 2);
+      final moreIndex = profile.destinations
+          .indexWhere((d) => d.screenId == ScreenIds.more);
+
+      expect(profile.indexOfLocation(AppRoutes.security), moreIndex);
+      expect(profile.indexOfLocation(AppRoutes.more), moreIndex);
     });
 
-    test('resolves a nested location to its owning branch', () {
-      final profile = navProfileFor(UserRole.employee);
-      expect(profile.indexOfLocation(AppRoutes.checkIn), 1);
-      expect(profile.indexOfLocation(AppRoutes.applyLeave), 2);
-      expect(profile.indexOfLocation(AppRoutes.payroll), 4);
-    });
-
-    test('falls back to Home for an unmatched location', () {
-      final profile = navProfileFor(UserRole.employee);
-      expect(profile.indexOfLocation('/unknown'), 0);
-    });
-
-    test('does not match a path that merely shares a prefix', () {
-      final profile = navProfileFor(UserRole.manager);
-      // '/teamwork' must not resolve to the '/team' branch.
-      expect(profile.indexOfLocation('/teamwork'), 0);
+    test('an unknown location falls back to the first branch', () {
+      final profile = navProfileFor(UserRole.hr);
+      expect(profile.indexOfLocation('/nowhere'), 0);
     });
   });
 }

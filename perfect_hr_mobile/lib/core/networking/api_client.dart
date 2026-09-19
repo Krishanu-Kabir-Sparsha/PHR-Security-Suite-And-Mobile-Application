@@ -253,3 +253,51 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     mapper: ref.watch(dioFailureMapperProvider),
   );
 });
+
+/// A Dio for the authentication endpoints themselves, carrying **no**
+/// AuthInterceptor.
+///
+/// Two independent reasons, either of which alone would require it.
+///
+/// *Recursion.* AuthInterceptor reacts to a 401 by calling
+/// `refreshAccessToken()`. If refresh went out through that same interceptor, a
+/// 401 from the refresh call would trigger another refresh, and so on. This is
+/// the same reasoning behind the bare `replayClient` inside [buildDio].
+///
+/// *A provider cycle.* `dioProvider` reads `authTokenStoreProvider`. Once that
+/// is overridden with a real store, the store needs an AuthRepository to
+/// refresh with, and the repository would need `apiClientProvider`, which needs
+/// `dioProvider` again. Riverpod detects the cycle and throws while the first
+/// frame is being built, which presents as a black screen on launch with no
+/// visible error.
+final authDioProvider = Provider<Dio>((ref) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: AppConfig.current.apiBaseUrl,
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 20),
+      headers: {
+        ApiHeaders.accept: 'application/json',
+        ApiHeaders.clientApp: 'perfect-hr-mobile',
+        ApiHeaders.clientPlatform: _platformName(),
+      },
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 300,
+      responseType: ResponseType.json,
+    ),
+  );
+  ref.onDispose(dio.close);
+  return dio;
+});
+
+/// [ApiClient] for sign-in, refresh and sign-out.
+///
+/// Shares the failure mapper, so an authentication error reaches the UI as the
+/// same `AppFailure` as any other, but not the auth interceptor.
+final authApiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient(
+    dio: ref.watch(authDioProvider),
+    mapper: ref.watch(dioFailureMapperProvider),
+  );
+});

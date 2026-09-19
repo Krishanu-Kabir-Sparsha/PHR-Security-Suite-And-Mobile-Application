@@ -9,7 +9,15 @@
     # the same request that stores the new one, and nothing in the UI ever
     # supplied it, so adding a second device was impossible -- blocking the
     # final-approval role, which requires two.
-    "version": "18.0.1.3.0",
+    # 18.0.1.5.0 - serves /.well-known/assetlinks.json, so a native mobile app
+    # can hold passkeys for this domain once its package and signing fingerprint
+    # are set in system parameters.
+    # 18.0.1.4.0 - the enrolment page now says HOW to add a second device. It
+    # stated the rule ("it must be a different device") without the three routes
+    # that satisfy it, so the browser offered to save the new passkey beside the
+    # first, that store refused because the existing credential is excluded, and
+    # the ceremony died with a browser message rather than ours.
+    "version": "18.0.1.5.0",
     "category": "Security",
     "license": "AGPL-3",
     "author": "Internal Security Programme",

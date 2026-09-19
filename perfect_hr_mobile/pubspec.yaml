@@ -31,25 +31,57 @@ dependencies:
   path_provider: ^2.1.4
   connectivity_plus: ^6.0.5 # Offline detection — UI-UX §48
 
-  # --- Task 3: identity & security -----------------------------------------
-  flutter_appauth: ^8.0.0 # OIDC Authorization Code + PKCE (Keycloak)
-  flutter_secure_storage: ^9.2.2 # Keystore / Keychain — Tech-Stack §11
-  local_auth: ^2.3.0 # Biometric re-authentication — Tech-Stack §17
-
-  # --- Later tasks (declared for planning; not imported until then) ---------
-  firebase_core: ^3.6.0 # Task 8 — push & crash reporting
-  firebase_messaging: ^15.1.3 # Task 8 — FCM
-  firebase_crashlytics: ^4.1.3 # Task 2 — observability
   intl: ^0.19.0 # Dates, numbers, currency (BDT)
-  fl_chart: ^0.69.0 # Task 10+ — dashboards, restrained charting
+  # Opens WebAuthn enrolment in a real browser. Android's WebView has no
+  # FIDO2 support, so the ceremony cannot run inside the app; see
+  # features/settings/presentation/security_screen.dart.
+  url_launcher: ^6.3.1
+  # Bearer tokens live in Keystore/Keychain, never in the Drift cache:
+  # that database is deliberately unencrypted (risk R9) and is safe only
+  # while sensitive material stays out of it.
+  flutter_secure_storage: ^9.2.2
+
+  # --- Declared-but-unused plugins, removed 2026-09-10 ---------------------
+  # These were declared "for planning" and imported by nothing (verified with
+  # grep across lib/ and test/). Declaring a *native* plugin is not free: it
+  # contributes its own Android requirements to the build even when no Dart
+  # code touches it. flutter_appauth 8.0.0 compiles against android-31 while
+  # its own androidx.fragment/androidx.window dependencies demand 34+, and that
+  # alone failed `flutter build apk` with 20 AAR-metadata errors. The Firebase
+  # trio would have followed, since they need google-services.json (Q9) and the
+  # Google Services Gradle plugin, neither of which exists yet.
+  #
+  # Re-add each one in the task that actually imports it, so a build never
+  # breaks for a dependency nothing uses:
+  #
+  #   Task 3 (auth):   flutter_secure_storage, local_auth
+  #                    NOT flutter_appauth — Keycloak is no longer the plan;
+  #                    Odoo will issue the bearer tokens directly.
+  #   Task 8 (push):   firebase_core, firebase_messaging, firebase_crashlytics
+  #   Task 10+ (viz):  fl_chart
+  #
+  # flutter_appauth: ^8.0.0
+  # flutter_secure_storage: ^9.2.2
+  # local_auth: ^2.3.0
+  # firebase_core: ^3.6.0
+  # firebase_messaging: ^15.1.3
+  # firebase_crashlytics: ^4.1.3
+  # fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
   build_runner: ^2.4.13
-  freezed: ^2.5.7
-  json_serializable: ^6.8.0
+  # freezed and json_serializable removed 2026-09-10. They were declared but
+  # never used: the project deliberately hand-writes fromJson/toJson (see
+  # PROJECT_STATE, Task 4) and `grep` finds no @freezed, @JsonSerializable or
+  # *.freezed.dart anywhere. Leaving them in was not merely dead weight — the
+  # freezed generator pins `analyzer` at language version 3.9, and Dart 3.13
+  # (Flutter 3.47) added dot-shorthand syntax, so its AST visitor threw
+  # "Missing implementation of visitDotShorthandPropertyAccess" on lib/app.dart
+  # and build_runner then hung with no output. Drift is the only generator this
+  # project actually needs.
   drift_dev: ^2.20.3
   mocktail: ^1.0.4 # Repository fakes for unit and widget tests
   integration_test:

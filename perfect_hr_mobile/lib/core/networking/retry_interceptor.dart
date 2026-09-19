@@ -55,6 +55,15 @@ class RetryPolicy {
           statusCode != null &&
           retryableStatuses.contains(statusCode),
 
+      // Dio's response-transformer timeout. Deliberately grouped with
+      // badResponse rather than with the timeouts above: the name says
+      // "timeout", but it is raised while *transforming a response*, which
+      // means the response arrived and the server has already applied whatever
+      // it was going to. Replaying a read is fine; replaying a mutation is the
+      // duplicate-submission hazard AD-19 exists to prevent, so it is refused
+      // here even when an idempotency key is present.
+      DioExceptionType.transformTimeout => isIdempotentMethod,
+
       // Certificate errors and cancellations are never transient.
       DioExceptionType.badCertificate ||
       DioExceptionType.cancel ||

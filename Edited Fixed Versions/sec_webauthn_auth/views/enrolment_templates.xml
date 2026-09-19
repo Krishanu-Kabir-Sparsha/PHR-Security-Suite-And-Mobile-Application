@@ -51,16 +51,59 @@
                             Enrol this device
                         </button>
                         <span id="wa_status" class="ms-3"/>
-                        <p t-if="credentials" class="wa-muted mt-3 mb-0">
-                            You already have an enrolled device, so you will be
-                            asked to confirm on <strong>that</strong> device
-                            first, and then to set up the new one. Two prompts,
-                            in that order.
-                            <br/>
-                            It must be a <strong>different</strong> device: the
-                            one already enrolled is excluded, so a second
-                            passkey on this same computer will be refused.
-                        </p>
+                        <div t-if="credentials" class="mt-3">
+                            <p class="wa-muted mb-2">
+                                You already have an enrolled device, so there
+                                are <strong>two prompts</strong>: first confirm
+                                on the device you already have, then set up the
+                                new one.
+                            </p>
+                            <!--
+                              The page used to say only that a different device
+                              was required. That is true and was not actionable:
+                              the browser offers to save the new passkey in the
+                              same place as the first, that place refuses
+                              because the existing credential is excluded, and
+                              the ceremony fails with a message from the browser
+                              rather than from us. Naming the three routes is
+                              the difference between a rule and an instruction.
+                            -->
+                            <p class="wa-muted mb-1">
+                                <strong>It must be a genuinely different
+                                device.</strong> The one you already have is
+                                excluded, so saving a second passkey in the same
+                                place will be refused. Pick one of these:
+                            </p>
+                            <ul class="wa-muted mb-0">
+                                <li>
+                                    <strong>Your phone, from this computer.</strong>
+                                    Click Enrol, and when the browser asks where
+                                    to save the passkey choose
+                                    <em>Use a phone or tablet</em>, then scan the
+                                    QR code with the phone's camera. The passkey
+                                    is created on the phone.
+                                </li>
+                                <li>
+                                    <strong>A security key.</strong> Plug in a
+                                    USB key, click Enrol, and choose
+                                    <em>Security key</em> when asked where to
+                                    save it.
+                                </li>
+                                <li>
+                                    <strong>On the other device itself.</strong>
+                                    Open this page there and enrol. You will
+                                    still be asked to confirm with the device you
+                                    already have, so keep it to hand.
+                                </li>
+                            </ul>
+                            <p class="wa-muted mt-2 mb-0">
+                                If your first passkey is synced to a cloud
+                                keychain it may already be present on the new
+                                device, and that keychain will refuse to hold a
+                                second one for this site. Choose a different
+                                place to save it, or use a security key.
+                            </p>
+                        </div>
                     </div>
 
                     <div t-if="credentials" class="mt-4">

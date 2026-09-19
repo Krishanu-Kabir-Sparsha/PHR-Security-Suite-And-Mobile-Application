@@ -27,6 +27,10 @@ class AppCard extends StatelessWidget {
   /// (e.g. risk level) without relying on colour alone elsewhere.
   final Color? accent;
 
+  /// Width of the leading accent bar, and of the inset that keeps content
+  /// clear of it. One constant so the two can never drift apart.
+  static const double _accentWidth = 3;
+
   final Color? background;
   final Color? borderColor;
   final String? semanticLabel;
@@ -38,11 +42,36 @@ class AppCard extends StatelessWidget {
     Widget content = Padding(padding: padding, child: child);
 
     if (accent != null) {
-      content = Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // The accent bar is drawn as a Stack overlay rather than a Row child.
+      //
+      // The previous form was a Row with CrossAxisAlignment.stretch, which asks
+      // every child to fill the Row's cross-axis extent. Inside a scrollable
+      // the Row's height is unbounded, so that extent is infinity and layout
+      // died with "BoxConstraints forces an infinite height". It only showed up
+      // in the AI card tests, where the card is rendered without a bounding
+      // height, and the failure then cascaded into thousands of misleading
+      // semantics assertions.
+      //
+      // A left BorderSide on the DecoratedBox below would be tidier still, but
+      // Flutter forbids a non-uniform Border together with a borderRadius, and
+      // the rounded corner is part of the spec (UI-UX 6.1).
+      //
+      // The Stack takes its size from `content`, the only non-positioned child,
+      // so nothing is unbounded. The padding keeps the 3px inset the Row's
+      // Expanded used to provide, so text does not slide under the bar.
+      content = Stack(
         children: [
-          Container(width: 3, color: accent),
-          Expanded(child: content),
+          Padding(
+            padding: const EdgeInsets.only(left: _accentWidth),
+            child: content,
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _accentWidth,
+            child: ColoredBox(color: accent!),
+          ),
         ],
       );
     }

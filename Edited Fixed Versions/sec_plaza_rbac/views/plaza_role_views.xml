@@ -5,7 +5,12 @@
         <field name="name">role.plaza_model.list</field>
         <field name="model">role.plaza_model</field>
         <field name="arch" type="xml">
-            <list string="Plaza Model Role Catalog" default_order="sequence,code">
+            <!-- decoration-warning marks a role whose Access Matrix claims
+                 permissions the backing group does not confer. Visible from
+                 the catalog list so the gap is found during a review rather
+                 than when somebody cannot do their job. -->
+            <list string="Plaza Model Role Catalog" default_order="sequence,code"
+                  decoration-warning="grants_nothing">
                 <field name="sequence" widget="handle"/>
                 <field name="code"/>
                 <field name="name"/>
@@ -13,6 +18,7 @@
                 <field name="group_id"/>
                 <field name="access_line_count"/>
                 <field name="user_count"/>
+                <field name="grants_nothing" string="Grants nothing" optional="show"/>
                 <field name="requires_webauthn" optional="show"/>
                 <field name="catalog_version" optional="hide"/>
             </list>
@@ -35,100 +41,96 @@
                             title="Archived"
                             bg_color="text-bg-danger"
                             invisible="active"/>
-                    <!--
-                        No warning banner and no button: a role now always gets
-                        a backing group, on create and again on first
-                        assignment if one is somehow missing. The empty state
-                        that this used to warn about is no longer reachable
-                        through normal use.
-                    -->
                     <div class="oe_title">
                         <label for="name"/>
-                        <h1><field name="name" placeholder="e.g. Accounting Lead"/></h1>
-                        <h3><field name="code" placeholder="e.g. ACC_LEAD"/></h3>
+                        <h1><field name="name" placeholder="e.g. Line Manager"/></h1>
+                        <h3><field name="code" placeholder="e.g. HR_LINE_MANAGER"/></h3>
                     </div>
                     <group>
-                        <group string="Definition">
+                        <group string="This Role">
                             <field name="active" invisible="1"/>
-                            <field name="sequence"/>
-                            <field name="group_id"
-                                   options="{'no_quick_create': True}"/>
-                            <field name="catalog_version"/>
-                        </group>
-                        <group string="Authorisation Role">
-                            <field name="is_approval_tier"/>
-                            <field name="requires_webauthn"/>
+                            <field name="sequence" invisible="1"/>
+                            <field name="catalog_version" invisible="1"/>
+                            <!-- Technical, and only ever set by the system.
+                                 Left visible in developer mode for support, and
+                                 out of the way otherwise: it is not a decision
+                                 anybody configuring a role has to make. -->
+                            <field name="group_id" groups="base.group_no_one"/>
                             <field name="user_count"/>
                         </group>
+                        <group string="Approvals">
+                            <field name="is_approval_tier"/>
+                            <field name="requires_webauthn"/>
+                        </group>
                     </group>
-                    <group string="Description (mandatory)">
+                    <group string="What this role is for">
                         <field name="description"
                                nolabel="1"
                                placeholder="What this role is for, and the boundaries of what it may do."/>
                     </group>
                     <notebook>
-                        <page string="Access Matrix" name="access_matrix">
+                        <!--
+                          One tab, one row per area, one choice per row.
+
+                          What used to be here asked for a module, a record
+                          type, four permission checkboxes, a transaction class
+                          and a capability: seven decisions, six of them
+                          mechanical consequences of the first, and all of them
+                          able to contradict one another. They still exist on
+                          the record because the segregation-of-duties scan and
+                          the mobile app read them; they are simply derived now.
+                        -->
+                        <page string="Permissions" name="permissions">
                             <field name="access_line_ids">
                                 <list editable="bottom">
-                                    <!-- allowed_model_ids drives the Model
-                                         domain. It has to be in the arch for
-                                         the client to evaluate that domain,
-                                         hence column_invisible. -->
-                                    <field name="allowed_model_ids"
-                                           column_invisible="1"/>
-                                    <!-- plaza_show_technical_name renders
-                                         "Sales (sale)" instead of "Sales".
-                                         Two installed modules share the label
-                                         "Sales"; see models/ir_module_module.py. -->
-                                    <field name="module_id"
-                                           context="{'plaza_show_technical_name': True}"
-                                           options="{'no_create': True, 'no_open': True}"/>
-                                    <field name="model_id"
-                                           domain="[('id', 'in', allowed_model_ids)]"
-                                           options="{'no_create': True, 'no_open': True}"
-                                           placeholder="Select a module first"/>
-                                    <!-- The stored technical values. Hidden by
-                                         default because the pickers above are
-                                         the working fields, but available from
-                                         the optional-columns menu: model_name
-                                         is what the SoD report and the seeded
-                                         catalog actually key on, so being able
-                                         to see it matters during review. -->
-                                    <field name="module_label" optional="hide"/>
-                                    <field name="model_name" optional="hide"/>
-                                    <field name="perm_read"/>
-                                    <field name="perm_create"/>
-                                    <field name="perm_write"/>
-                                    <field name="perm_unlink"/>
-                                    <field name="transaction_type"/>
-                                    <field name="capability"/>
-                                    <field name="field_restrictions"/>
-                                    <field name="notes" optional="hide"/>
+                                    <field name="area"/>
+                                    <field name="access_level"/>
+                                    <field name="notes"
+                                           string="Why"
+                                           placeholder="Reason, for the monthly review"/>
+                                    <field name="field_restrictions"
+                                           optional="hide"/>
+                                    <!-- Derived. Visible in developer mode only,
+                                         so support can see what a line resolved
+                                         to without it becoming another thing to
+                                         fill in. -->
+                                    <field name="transaction_type"
+                                           groups="base.group_no_one"
+                                           optional="hide"/>
+                                    <field name="capability"
+                                           groups="base.group_no_one"
+                                           optional="hide"/>
                                 </list>
                             </field>
-                            <p class="text-muted mt-2">
-                                A single role may never carry both Create and Approve
-                                on the same transaction class. Conflicts arising from a
-                                <em>combination</em> of roles are detected by the
-                                segregation-of-duties scan.
-                            </p>
-                        </page>
-                        <page string="Assigned Users" name="users">
-                            <!--
-                                Editable, but still derived: the inverse writes
-                                res.users.groups_id rather than group.users, so
-                                the non-standard-grant guard in ResUsers.write
-                                still runs. See _inverse_user_ids.
-                            -->
-                            <div class="alert alert-info" role="alert">
-                                Adding or removing someone here changes their
-                                membership of this role's Backing Security
-                                Group. It requires permission to administer
-                                users.
+                            <div class="text-muted mt-2">
+                                A role may either submit work or approve it,
+                                never both for the same area. That is what makes
+                                an approval mean something, and it is enforced
+                                when the role is saved. Conflicts that arise from
+                                one person holding several roles are found by the
+                                segregation-of-duties scan instead.
                             </div>
-                            <field name="user_ids"
-                                   options="{'no_create': True}">
-                                <list>
+                            <div class="alert alert-info mt-2" role="status"
+                                 invisible="not granted_summary">
+                                <strong>This role gives access to:</strong>
+                                <field name="granted_summary" nolabel="1" readonly="1"/>
+                            </div>
+                            <div class="alert alert-warning mt-2" role="alert"
+                                 invisible="not grants_nothing">
+                                <strong>This role grants nothing yet.</strong>
+                                Its permissions are set, but none of them confer
+                                access in Perfect HR. Save the role to apply
+                                them, or ask an administrator if this persists.
+                            </div>
+                            <field name="grants_nothing" invisible="1"/>
+                        </page>
+                        <page string="People" name="users">
+                            <div class="alert alert-info" role="status">
+                                Adding someone here gives them everything on the
+                                Permissions tab.
+                            </div>
+                            <field name="user_ids">
+                                <list editable="bottom">
                                     <field name="login"/>
                                     <field name="name"/>
                                 </list>

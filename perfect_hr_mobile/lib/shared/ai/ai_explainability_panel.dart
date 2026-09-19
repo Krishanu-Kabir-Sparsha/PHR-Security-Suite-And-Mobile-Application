@@ -31,7 +31,15 @@ class AiReason {
 /// recommendation, and a recommendation without an explanation would breach
 /// the trust rules. See Project State Q3.
 class AiExplainabilityPanel extends StatelessWidget {
-  const AiExplainabilityPanel({
+  // Deliberately NOT a const constructor, and the assert is why. `List.length`
+  // is not const-evaluable, so a `const AiExplainabilityPanel(...)` cannot
+  // compile at all — it fails with `const_eval_property_access`. The choice is
+  // between the const optimisation and the assert, and the assert wins: it is
+  // the mechanism that makes AD-14 real, stopping an AI conclusion from being
+  // rendered without its reasons. Dart offers no const-evaluable way to check
+  // a list is non-empty, so a widget that cannot verify its own invariant at
+  // compile time should not advertise a const constructor.
+  AiExplainabilityPanel({
     required this.conclusion,
     required this.reasons,
     this.provenance = AiProvenance.recommendation,
@@ -40,7 +48,7 @@ class AiExplainabilityPanel extends StatelessWidget {
     this.onViewData,
     super.key,
   }) : assert(
-          reasons.length > 0,
+          reasons.isNotEmpty,
           'An AI conclusion must be accompanied by its reasons '
           '(UI-UX §5 Explainability).',
         );

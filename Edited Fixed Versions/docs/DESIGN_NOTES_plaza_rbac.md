@@ -67,3 +67,38 @@ suite-wide Super Administrator group is defined here rather than in
 `sec_record_freeze`, which needs it for the US-3.2 lock toggles. The alternative
 was a separate `sec_base` module for two XML records, which did not seem worth
 the dependency.
+
+## 8. Catalog ceiling raised from 20 to 25 for the HR extension
+
+PRD US-2.1 specifies "min 10, max 20 active roles", and §1 above records the
+shipped catalog at 15 — comfortably inside the band.
+
+Extending the catalog to cover human resources added six roles (Employee, Line
+Manager, HR Officer, Payroll Officer, HR Manager, CHRO), taking the total to 21
+and making `_check_catalog_upper_bound` reject the module upgrade outright.
+
+**`MAX_ACTIVE_ROLES` is now 25.** The reasoning, so a reviewer does not have to
+reconstruct it:
+
+- The figure 20 was chosen when the catalog governed a single domain — sales,
+  purchasing and finance. HR is a second domain, not role proliferation within
+  the first, so the ceiling was rejecting a legitimate expansion of scope rather
+  than the failure mode it exists to catch.
+- The bound is kept, and kept tight, because that failure mode is real: a
+  catalog that grows a role per person stops being a control and becomes an
+  inventory. 25 leaves four slots, so the next addition is still a deliberate
+  decision rather than a default.
+
+**This supersedes the figure in the PRD and needs product sign-off.** Two
+alternatives were considered and rejected:
+
+- *Archive an unused finance role.* Which role is a business decision, not an
+  engineering one, and archiving something to make room for something unrelated
+  is a poor reason to remove a control.
+- *Trim the HR set to five.* The obvious candidate is CHRO, which approves and
+  creates nothing. But the set is sized by the duty separations it must express,
+  not by the space available, and landing exactly on the ceiling would mean the
+  next HR or finance role hits the wall immediately.
+
+If the ceiling is not approved, archiving a finance role is the correct fallback
+rather than reducing the HR set.

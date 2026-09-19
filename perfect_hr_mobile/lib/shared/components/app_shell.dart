@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/routing/nav_profile.dart';
+import '../../features/settings/presentation/more_screen.dart';
 import '../extensions/theme_context.dart';
 
 /// Role-aware application shell.
@@ -34,7 +35,16 @@ class AppShell extends StatelessWidget {
     final palette = context.palette;
 
     return Scaffold(
-      body: navigationShell,
+      // Above the branch content and outside it, so a role preview stays
+      // visible no matter which tab is open and cannot be scrolled away. An
+      // administrator who forgets they are previewing will misread every
+      // screen in the app.
+      body: Column(
+        children: [
+          const RolePreviewBanner(),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: palette.border)),

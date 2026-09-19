@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/authentication/presentation/welcome_screen.dart';
+import '../../features/attendance/presentation/attendance_screen.dart';
+import '../../features/leave/presentation/leave_screen.dart';
 import '../../features/dashboard/presentation/employee_home_screen.dart';
 import '../../shared/components/app_shell.dart';
 import '../../shared/screens/screen_placeholder.dart';
@@ -11,6 +13,9 @@ import '../session/session_controller.dart';
 import '../session/session_state.dart';
 import '../session/user_role.dart';
 import 'app_routes.dart';
+import '../../features/authentication/presentation/login_screen.dart';
+import '../../features/settings/presentation/more_screen.dart';
+import '../../features/settings/presentation/security_screen.dart';
 import 'nav_profile.dart';
 
 /// Application router.
@@ -67,12 +72,7 @@ GoRouter _buildRouter(
       GoRoute(
         path: AppRoutes.login,
         name: ScreenIds.authLogin,
-        builder: (_, __) => const ScreenPlaceholder(
-          screenId: ScreenIds.authLogin,
-          title: 'Sign In',
-          purpose: 'Organization, employee ID or email, password.',
-          plannedTask: 'Task 3 — Authentication (Keycloak OIDC + PKCE)',
-        ),
+        builder: (_, __) => const LoginScreen(),
         routes: [
           GoRoute(
             path: 'mfa',
@@ -166,6 +166,8 @@ GoRouter _buildRouter(
 Widget _screenFor(String screenId) {
   return switch (screenId) {
     ScreenIds.employeeHome => const EmployeeHomeScreen(),
+    ScreenIds.attendanceHome => const AttendanceScreen(),
+    ScreenIds.more => const MoreScreen(),
     _ => ScreenPlaceholder(
         screenId: screenId,
         title: _branchTitle(screenId),
@@ -234,19 +236,20 @@ List<RouteBase> _nestedRoutesFor(String branchPath) {
       ],
     AppRoutes.requests => [
         // 'leave' must precede ':requestId' so it is not swallowed as an ID.
-        _placeholderRoute(
+        GoRoute(
           path: 'leave',
-          screenId: ScreenIds.leaveDashboard,
-          title: 'Leave',
-          purpose: 'Balances, upcoming leave, AI leave advisor.',
-          task: 'Task 6 — Leave',
-          children: [
-            _placeholderRoute(
+          name: ScreenIds.leaveDashboard,
+          builder: (_, __) => const LeaveScreen(),
+          routes: [
+            // E-06 is a bottom sheet over E-05, not a page: applying is a
+            // decision made while looking at a balance, and a full screen
+            // hides the number being decided against. The route stays
+            // registered so an existing deep link still resolves — it lands
+            // on E-05, which is where the Apply button is.
+            GoRoute(
               path: 'apply',
-              screenId: ScreenIds.applyLeave,
-              title: 'Apply Leave',
-              purpose: 'Type, dates, reason, attachment, AI coverage check.',
-              task: 'Task 6 — Leave',
+              name: ScreenIds.applyLeave,
+              redirect: (_, __) => AppRoutes.leave,
             ),
           ],
         ),
@@ -351,12 +354,13 @@ List<RouteBase> _nestedRoutesFor(String branchPath) {
           purpose: 'Personal, employment, skills, documents.',
           task: 'Task 7 — Profile',
         ),
-        _placeholderRoute(
+        // SET-02. Real screen rather than a placeholder: security-key
+        // enrolment is the one part of Task 3 that does not depend on the
+        // authentication work, because the ceremony happens in the browser.
+        GoRoute(
           path: 'security',
-          screenId: ScreenIds.security,
-          title: 'Security',
-          purpose: 'Biometric, MFA, active devices, security activity.',
-          task: 'Task 3 — Authentication',
+          name: ScreenIds.security,
+          builder: (_, __) => const SecurityScreen(),
         ),
       ],
     _ => const [],

@@ -59,138 +59,54 @@ class NavProfile {
 /// Spec: UI-UX Specification §5, Functional Blueprint §3, Instructions §11.
 /// The structure stays visually constant across roles — five destinations,
 /// with Home first and AI in position four — while the content behind each
-/// destination changes. Do not alter without a documented product reason.
+/// destination changes. The target, once the role screens exist:
 ///
-///   Employee  Home | Attendance | Requests  | AI | More
-///   Manager   Home | Team       | Approvals | AI | More
-///   HR        Home | Workforce  | Approvals | AI | More
-///   Executive Home | Insights   | Alerts    | AI | More
-///   SuperAdmin Home | Tenants   | Monitoring| AI | More
+///   Employee   Home | Attendance | Requests   | AI | More
+///   Manager    Home | Team       | Approvals  | AI | More
+///   HR         Home | Workforce  | Approvals  | AI | More
+///   Executive  Home | Insights   | Alerts     | AI | More
+///   SuperAdmin Home | Tenants    | Monitoring | AI | More
+///
+/// **Every role currently gets the employee surface**, and that is deliberate
+/// rather than an oversight.
+///
+/// Of the screens in the table above, exactly two are built: E-01 Employee Home
+/// and SET-01 More. A super admin signing in was therefore shown SA-00, SA-01
+/// and SA-02 — three placeholder screens — and never reached the one screen
+/// that renders their real attendance and leave, because Home resolved to
+/// SA-00 for their role. The app looked disconnected from its own backend when
+/// in fact the data layer was working and the screens simply did not exist yet.
+///
+/// The employee surface is the honest common denominator: `GET /me/home` is
+/// scoped to the authenticated user, so it returns real data for a super admin
+/// exactly as it does for an employee. Role-specific navigation returns one
+/// role at a time as each role's home screen is built — restore that role's
+/// branch from the table above and from `_screenFor` in `app_router.dart`.
 NavProfile navProfileFor(UserRole role) {
-  return switch (role) {
-    UserRole.employee => NavProfile(
-        role: role,
-        destinations: [
-          _home(ScreenIds.employeeHome),
-          const AppNavDestination(
-            label: 'Attendance',
-            path: AppRoutes.attendance,
-            screenId: ScreenIds.attendanceHome,
-            icon: Icons.schedule_outlined,
-            selectedIcon: Icons.schedule,
-            semanticLabel: 'Attendance',
-          ),
-          const AppNavDestination(
-            label: 'Requests',
-            path: AppRoutes.requests,
-            screenId: ScreenIds.requestCenter,
-            icon: Icons.assignment_outlined,
-            selectedIcon: Icons.assignment,
-            semanticLabel: 'My requests',
-          ),
-          _ai(),
-          _more(),
-        ],
+  return NavProfile(
+    role: role,
+    destinations: [
+      _home(ScreenIds.employeeHome),
+      const AppNavDestination(
+        label: 'Attendance',
+        path: AppRoutes.attendance,
+        screenId: ScreenIds.attendanceHome,
+        icon: Icons.schedule_outlined,
+        selectedIcon: Icons.schedule,
+        semanticLabel: 'Attendance',
       ),
-    UserRole.manager => NavProfile(
-        role: role,
-        destinations: [
-          _home(ScreenIds.managerHome),
-          const AppNavDestination(
-            label: 'Team',
-            path: AppRoutes.team,
-            screenId: ScreenIds.myTeam,
-            icon: Icons.groups_outlined,
-            selectedIcon: Icons.groups,
-            semanticLabel: 'My team',
-          ),
-          const AppNavDestination(
-            label: 'Approvals',
-            path: AppRoutes.approvals,
-            screenId: ScreenIds.approvalInbox,
-            icon: Icons.fact_check_outlined,
-            selectedIcon: Icons.fact_check,
-            semanticLabel: 'Approvals',
-          ),
-          _ai(),
-          _more(),
-        ],
+      const AppNavDestination(
+        label: 'Requests',
+        path: AppRoutes.requests,
+        screenId: ScreenIds.requestCenter,
+        icon: Icons.assignment_outlined,
+        selectedIcon: Icons.assignment,
+        semanticLabel: 'My requests',
       ),
-    UserRole.hr => NavProfile(
-        role: role,
-        destinations: [
-          _home(ScreenIds.hrDashboard),
-          const AppNavDestination(
-            label: 'Workforce',
-            path: AppRoutes.workforce,
-            screenId: ScreenIds.workforce,
-            icon: Icons.badge_outlined,
-            selectedIcon: Icons.badge,
-            semanticLabel: 'Workforce',
-          ),
-          const AppNavDestination(
-            label: 'Approvals',
-            path: AppRoutes.approvals,
-            screenId: ScreenIds.hrRequestCenter,
-            icon: Icons.fact_check_outlined,
-            selectedIcon: Icons.fact_check,
-            semanticLabel: 'HR requests and approvals',
-          ),
-          _ai(),
-          _more(),
-        ],
-      ),
-    UserRole.chro || UserRole.executive => NavProfile(
-        role: role,
-        destinations: [
-          _home(ScreenIds.executiveHome),
-          const AppNavDestination(
-            label: 'Insights',
-            path: AppRoutes.insights,
-            screenId: ScreenIds.workforceIntelligence,
-            icon: Icons.insights_outlined,
-            selectedIcon: Icons.insights,
-            semanticLabel: 'Workforce insights',
-          ),
-          const AppNavDestination(
-            label: 'Alerts',
-            path: AppRoutes.alerts,
-            screenId: ScreenIds.notifications,
-            icon: Icons.notifications_outlined,
-            selectedIcon: Icons.notifications,
-            semanticLabel: 'Alerts',
-          ),
-          _ai(),
-          _more(),
-        ],
-      ),
-    UserRole.superAdmin => NavProfile(
-        role: role,
-        destinations: [
-          // Must differ from the Tenants destination below: GoRouter requires
-          // route names to be unique within a router instance.
-          _home(ScreenIds.saasHome),
-          const AppNavDestination(
-            label: 'Tenants',
-            path: AppRoutes.tenants,
-            screenId: ScreenIds.tenantList,
-            icon: Icons.apartment_outlined,
-            selectedIcon: Icons.apartment,
-            semanticLabel: 'Tenants',
-          ),
-          const AppNavDestination(
-            label: 'Monitoring',
-            path: AppRoutes.monitoring,
-            screenId: ScreenIds.saasMonitoring,
-            icon: Icons.monitor_heart_outlined,
-            selectedIcon: Icons.monitor_heart,
-            semanticLabel: 'Platform monitoring',
-          ),
-          _ai(),
-          _more(),
-        ],
-      ),
-  };
+      _ai(),
+      _more(),
+    ],
+  );
 }
 
 AppNavDestination _home(String screenId) => AppNavDestination(

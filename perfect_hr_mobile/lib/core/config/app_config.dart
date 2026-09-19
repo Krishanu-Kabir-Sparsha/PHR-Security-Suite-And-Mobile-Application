@@ -66,7 +66,7 @@ class AppConfig {
     return switch (flavor) {
       AppFlavor.dev => const AppConfig(
           flavor: AppFlavor.dev,
-          apiBaseUrl: 'https://api-dev.perfecthr.example/api/v1',
+          apiBaseUrl: 'https://dev.perfecthr.net/api/mobile/v1',
           keycloakBaseUrl: 'https://id-dev.perfecthr.example',
           keycloakRealm: 'perfect-hr',
           keycloakClientId: 'perfect-hr-mobile',

@@ -75,7 +75,12 @@ class ScreenPlaceholder extends StatelessWidget {
                       const SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(
-                          'Not implemented',
+                          // "Coming soon", not "Not implemented". Both are
+                          // true, but the second reads to a user as a fault
+                          // in the app they are holding rather than as work
+                          // that has not been done yet, and this screen is
+                          // reachable in a real signed-in session.
+                          'Coming soon',
                           style: context.text.bodySmall,
                         ),
                       ),

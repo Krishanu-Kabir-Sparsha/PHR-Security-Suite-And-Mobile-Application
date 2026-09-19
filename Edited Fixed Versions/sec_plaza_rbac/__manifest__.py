@@ -2,13 +2,14 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 {
     "name": "Security Suite - Plaza Model RBAC",
-    "summary": "Bounded role catalog (Plaza Model) with module/field access matrix "
-    "and segregation-of-duties checking.",
-    # 18.0.1.1.0 - access matrix lines gained module_id / model_id pickers, and
-    # Assigned Users became editable. Both pickers are stored computed fields,
-    # so upgrading backfills them from the existing module_label / model_name
-    # text with no migration script.
-    "version": "18.0.1.1.0",
+    "summary": "Bounded role catalog with area-based permissions and "
+    "segregation-of-duties checking.",
+    # 18.0.1.5.0 - a permission is now one area and one level. The module,
+    # record type, four permission checkboxes, transaction class and capability
+    # it replaced are all derived, and the role's permissions now confer access
+    # directly instead of only describing it. migrations/18.0.1.5.0 converts
+    # existing lines; see its docstring for why it must run pre-ORM.
+    "version": "18.0.1.5.0",
     "category": "Security",
     "license": "AGPL-3",
     "author": "Internal Security Programme",
@@ -26,6 +27,7 @@
         "views/sod_views.xml",
         "views/menus.xml",
         "data/plaza_role_data.xml",
+        "data/plaza_role_hr_data.xml",
     ],
     "application": True,
     "installable": True,

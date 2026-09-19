@@ -146,7 +146,12 @@ class AiInsightCard extends StatelessWidget {
 /// Use for: leave and attendance approvals, recruitment shortlisting,
 /// performance and attrition interventions, compensation.
 class AiRecommendationCard extends StatelessWidget {
-  const AiRecommendationCard({
+  // Not const, for the same reason as AiExplainabilityPanel: `List.length` is
+  // not const-evaluable, so a const invocation cannot compile. Nothing calls
+  // this with `const` today, which is the only reason analysis passed before —
+  // the first person to write `const AiRecommendationCard(...)` would have hit
+  // it. Keeping the assert and dropping const preserves AD-14.
+  AiRecommendationCard({
     required this.recommendation,
     required this.reasons,
     required this.decisionAuthority,
@@ -156,7 +161,7 @@ class AiRecommendationCard extends StatelessWidget {
     this.onViewData,
     super.key,
   }) : assert(
-          reasons.length > 0,
+          reasons.isNotEmpty,
           'An AI recommendation must carry its reasons '
           '(UI-UX §5, Instructions §14).',
         );

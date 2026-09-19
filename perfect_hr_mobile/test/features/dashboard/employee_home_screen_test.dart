@@ -21,10 +21,16 @@ import 'package:perfect_hr_mobile/shared/components/ux_states.dart';
 
 /// Repository stub driving one scripted outcome.
 class _StubRepository implements EmployeeHomeRepository {
-  _StubRepository({this.snapshot, this.failure});
+  _StubRepository({this.snapshot, this.failure, this.delay});
 
   final DataSnapshot<EmployeeHomeSummary>? snapshot;
   final Object? failure;
+
+  /// Holds the load pending so the loading state can be asserted. Without it
+  /// `loadHome` completes on the next microtask, and any test that advances
+  /// the clock before looking has already missed the skeletons.
+  final Duration? delay;
+
   int loadCount = 0;
   int invalidateCount = 0;
 
@@ -33,6 +39,8 @@ class _StubRepository implements EmployeeHomeRepository {
     bool forceRefresh = false,
   }) async {
     loadCount++;
+    final d = delay;
+    if (d != null) await Future<void>.delayed(d);
     final f = failure;
     if (f != null) throw f;
     return snapshot!;
@@ -72,6 +80,15 @@ void main() {
 
   group('E-01 loaded state', () {
     testWidgets('renders the five specified sections in order', (tester) async {
+      // A phone is tall; the default 800x600 test surface is not, and this
+      // screen's ListView builds lazily, so PENDING and the AI insight were
+      // never constructed and `getTopLeft` had nothing to measure. These
+      // assertions are about the screen's composition and section order, so
+      // give them a surface tall enough to hold the whole screen.
+      tester.view.physicalSize = const Size(1200, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final container = _container(
         _StubRepository(snapshot: _live(MockEmployeeHomeRepository.sample())),
       );
@@ -187,6 +204,15 @@ void main() {
   group('E-01 AI insight — trust rules', () {
     testWidgets('a descriptive insight is labelled AI-generated',
         (tester) async {
+      // A phone is tall; the default 800x600 test surface is not, and this
+      // screen's ListView builds lazily, so PENDING and the AI insight were
+      // never constructed and `getTopLeft` had nothing to measure. These
+      // assertions are about the screen's composition and section order, so
+      // give them a surface tall enough to hold the whole screen.
+      tester.view.physicalSize = const Size(1200, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final container = _container(
         _StubRepository(snapshot: _live(MockEmployeeHomeRepository.sample())),
       );
@@ -264,14 +290,21 @@ void main() {
   group('E-01 states', () {
     testWidgets('loading shows skeletons', (tester) async {
       final container = _container(
-        _StubRepository(snapshot: _live(MockEmployeeHomeRepository.sample())),
+        _StubRepository(
+          snapshot: _live(MockEmployeeHomeRepository.sample()),
+          delay: const Duration(milliseconds: 500),
+        ),
       );
       addTearDown(container.dispose);
 
       await tester.pumpWidget(_app(container));
       await tester.pump(const Duration(milliseconds: 50));
 
+      // Still inside the 500ms load, so the skeletons must be on screen.
       expect(find.byType(AppSkeleton), findsWidgets);
+
+      // Let the pending load finish, or the test ends with a live timer.
+      await tester.pumpAndSettle(const Duration(milliseconds: 600));
     });
 
     testWidgets('a transport failure shows the error state with retry',

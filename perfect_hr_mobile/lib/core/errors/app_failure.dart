@@ -70,9 +70,17 @@ class NetworkFailure extends AppFailure {
 
 /// Server-side error. Deliberately opaque to the user.
 class ServerFailure extends AppFailure {
+  // isRetryable is exposed and defaults to true: a 500 or 503 is usually worth
+  // another attempt. It has to be *expressible*, though, because not every
+  // ServerFailure is transient — a bad TLS certificate maps here and must not
+  // offer a retry, since retrying through a possibly-intercepted network is not
+  // a remedy. Before this parameter existed the certificate case documented
+  // that intent in a comment and the test asserted it, but the type could not
+  // represent it, so every certificate failure rendered a Try Again button.
   const ServerFailure({
     super.userMessage = "Something went wrong on our side. Please try again.",
     super.technical,
+    super.isRetryable,
   });
 
   @override

@@ -30,50 +30,26 @@
 
     <record id="access_ceo_owner_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_ceo_owner"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">sale_order</field>
-        <field name="capability">approve</field>
+        <field name="area">sales</field>
+        <field name="access_level">approve</field>
         <field name="notes">Final-tier visibility and approval only; no creation rights by design.</field>
     </record>
     <record id="access_ceo_owner_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_ceo_owner"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">purchase_order</field>
-        <field name="capability">approve</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">approve</field>
         <field name="notes">Final-tier visibility and approval only.</field>
     </record>
     <record id="access_ceo_owner_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_ceo_owner"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">journal_entry</field>
-        <field name="capability">approve</field>
+        <field name="area">journals</field>
+        <field name="access_level">approve</field>
         <field name="notes">Read-only over the ledger.</field>
     </record>
     <record id="access_ceo_owner_4" model="role.plaza_model.access">
         <field name="role_id" ref="role_ceo_owner"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.payment</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">vendor_payment</field>
-        <field name="capability">approve</field>
+        <field name="area">payments</field>
+        <field name="access_level">approve</field>
         <field name="notes">Approval authority over outbound payments.</field>
     </record>
 
@@ -93,38 +69,21 @@
 
     <record id="access_dept_head_sales_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_sales"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">sale_order</field>
-        <field name="capability">approve</field>
+        <field name="area">sales</field>
+        <field name="access_level">approve</field>
         <field name="field_restrictions">margin_percent</field>
         <field name="notes">Approves orders; margin field restricted to Accounting.</field>
     </record>
     <record id="access_dept_head_sales_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_sales"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">res.partner</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">create</field>
+        <field name="area">master_data</field>
+        <field name="access_level">submit</field>
         <field name="notes">Maintains customer master data.</field>
     </record>
     <record id="access_dept_head_sales_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_sales"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">journals</field>
+        <field name="access_level">view</field>
         <field name="field_restrictions">amount_residual</field>
         <field name="notes">Read-only sight of customer invoices for context.</field>
     </record>
@@ -145,37 +104,20 @@
 
     <record id="access_dept_head_purch_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_purch"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">purchase_order</field>
-        <field name="capability">approve</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">approve</field>
         <field name="notes">Approves purchase orders.</field>
     </record>
     <record id="access_dept_head_purch_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_purch"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">res.partner</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">create</field>
+        <field name="area">master_data</field>
+        <field name="access_level">submit</field>
         <field name="notes">Maintains vendor master data.</field>
     </record>
     <record id="access_dept_head_purch_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_dept_head_purch"/>
-        <field name="module_label">Inventory</field>
-        <field name="model_name">stock.picking</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">inventory</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only receipt visibility.</field>
     </record>
 
@@ -195,35 +137,20 @@
 
     <record id="access_compliance_lead_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_compliance_lead"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">sales</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only for policy review.</field>
     </record>
     <record id="access_compliance_lead_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_compliance_lead"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only for policy review.</field>
     </record>
     <record id="access_compliance_lead_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_compliance_lead"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">journals</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only for policy review.</field>
     </record>
 
@@ -243,46 +170,26 @@
 
     <record id="access_sys_monitor_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_sys_monitor"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">sales</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only surveillance.</field>
     </record>
     <record id="access_sys_monitor_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_sys_monitor"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only surveillance.</field>
     </record>
     <record id="access_sys_monitor_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_sys_monitor"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">journals</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only surveillance.</field>
     </record>
     <record id="access_sys_monitor_4" model="role.plaza_model.access">
         <field name="role_id" ref="role_sys_monitor"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.payment</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">payments</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only surveillance.</field>
     </record>
 
@@ -302,25 +209,9 @@
 
     <record id="access_sw_admin_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_sw_admin"/>
-        <field name="module_label">Settings</field>
-        <field name="model_name">res.users</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">user_admin</field>
+        <field name="access_level">submit</field>
         <field name="notes">Provisioning only; cannot delete users, which would orphan audit references.</field>
-    </record>
-    <record id="access_sw_admin_2" model="role.plaza_model.access">
-        <field name="role_id" ref="role_sw_admin"/>
-        <field name="module_label">Settings</field>
-        <field name="model_name">res.groups</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
-        <field name="notes">Reads group definitions; changes route through the role catalog.</field>
     </record>
 
     <record id="group_role_acc_lead" model="res.groups">
@@ -339,38 +230,15 @@
 
     <record id="access_acc_lead_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_acc_lead"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">journal_entry</field>
-        <field name="capability">approve</field>
+        <field name="area">journals</field>
+        <field name="access_level">approve</field>
         <field name="notes">Approves and posts journal entries prepared by clerks.</field>
     </record>
     <record id="access_acc_lead_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_acc_lead"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.payment</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">vendor_payment</field>
-        <field name="capability">approve</field>
+        <field name="area">payments</field>
+        <field name="access_level">approve</field>
         <field name="notes">Approves outbound payments; does not create them.</field>
-    </record>
-    <record id="access_acc_lead_3" model="role.plaza_model.access">
-        <field name="role_id" ref="role_acc_lead"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.journal</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
-        <field name="notes">Read-only journal configuration.</field>
     </record>
 
     <record id="group_role_acc_clerk" model="res.groups">
@@ -389,37 +257,20 @@
 
     <record id="access_acc_clerk_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_acc_clerk"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">vendor_bill</field>
-        <field name="capability">create</field>
+        <field name="area">vendor_bills</field>
+        <field name="access_level">submit</field>
         <field name="notes">Prepares vendor bills in draft.</field>
     </record>
     <record id="access_acc_clerk_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_acc_clerk"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.payment</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">vendor_payment</field>
-        <field name="capability">create</field>
+        <field name="area">payments</field>
+        <field name="access_level">submit</field>
         <field name="notes">Prepares payment proposals only.</field>
     </record>
     <record id="access_acc_clerk_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_acc_clerk"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.analytic.line</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">journals</field>
+        <field name="access_level">submit</field>
         <field name="notes">Cost allocation entry.</field>
     </record>
 
@@ -439,25 +290,14 @@
 
     <record id="access_ar_clerk_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_ar_clerk"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">customer_invoice</field>
-        <field name="capability">create</field>
+        <field name="area">customer_invoices</field>
+        <field name="access_level">submit</field>
         <field name="notes">Raises customer invoices in draft.</field>
     </record>
     <record id="access_ar_clerk_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_ar_clerk"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">sales</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only order reference for invoicing.</field>
     </record>
 
@@ -477,26 +317,14 @@
 
     <record id="access_sales_manager_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_sales_manager"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">sale_order</field>
-        <field name="capability">approve</field>
+        <field name="area">sales</field>
+        <field name="access_level">approve</field>
         <field name="notes">Confirms orders prepared by executives.</field>
     </record>
     <record id="access_sales_manager_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_sales_manager"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">product.pricelist</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">approve</field>
+        <field name="area">master_data</field>
+        <field name="access_level">approve</field>
         <field name="notes">Maintains approved pricing.</field>
     </record>
 
@@ -516,38 +344,21 @@
 
     <record id="access_sales_exec_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_sales_exec"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">sale_order</field>
-        <field name="capability">create</field>
+        <field name="area">sales</field>
+        <field name="access_level">submit</field>
         <field name="field_restrictions">margin_percent</field>
         <field name="notes">Draft creation only; frozen on confirmation.</field>
     </record>
     <record id="access_sales_exec_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_sales_exec"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">crm.lead</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="True"/>
-        <field name="capability">none</field>
+        <field name="area">crm</field>
+        <field name="access_level">submit</field>
         <field name="notes">Full control of own pipeline.</field>
     </record>
     <record id="access_sales_exec_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_sales_exec"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">res.partner</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">create</field>
+        <field name="area">master_data</field>
+        <field name="access_level">submit</field>
         <field name="notes">May add new customers, not amend existing master data.</field>
     </record>
 
@@ -567,26 +378,14 @@
 
     <record id="access_purch_manager_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_purch_manager"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">purchase_order</field>
-        <field name="capability">approve</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">approve</field>
         <field name="notes">Confirms purchase orders.</field>
     </record>
     <record id="access_purch_manager_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_purch_manager"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">product.supplierinfo</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">approve</field>
+        <field name="area">master_data</field>
+        <field name="access_level">approve</field>
         <field name="notes">Maintains approved vendor pricing.</field>
     </record>
 
@@ -606,26 +405,14 @@
 
     <record id="access_purch_officer_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_purch_officer"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">purchase_order</field>
-        <field name="capability">create</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">submit</field>
         <field name="notes">Draft creation only; frozen on confirmation.</field>
     </record>
     <record id="access_purch_officer_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_purch_officer"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">res.partner</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">master_data</field>
-        <field name="capability">create</field>
+        <field name="area">master_data</field>
+        <field name="access_level">submit</field>
         <field name="notes">May add new vendors, not amend existing master data.</field>
     </record>
 
@@ -645,25 +432,14 @@
 
     <record id="access_inventory_officer_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_inventory_officer"/>
-        <field name="module_label">Inventory</field>
-        <field name="model_name">stock.picking</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="transaction_type">stock_move</field>
-        <field name="capability">create</field>
+        <field name="area">inventory</field>
+        <field name="access_level">submit</field>
         <field name="notes">Records physical movements.</field>
     </record>
     <record id="access_inventory_officer_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_inventory_officer"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only to verify receipts against orders.</field>
     </record>
 
@@ -683,46 +459,26 @@
 
     <record id="access_auditor_ro_1" model="role.plaza_model.access">
         <field name="role_id" ref="role_auditor_ro"/>
-        <field name="module_label">Sales</field>
-        <field name="model_name">sale.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">sales</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only.</field>
     </record>
     <record id="access_auditor_ro_2" model="role.plaza_model.access">
         <field name="role_id" ref="role_auditor_ro"/>
-        <field name="module_label">Purchase</field>
-        <field name="model_name">purchase.order</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">purchasing</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only.</field>
     </record>
     <record id="access_auditor_ro_3" model="role.plaza_model.access">
         <field name="role_id" ref="role_auditor_ro"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.move</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">journals</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only.</field>
     </record>
     <record id="access_auditor_ro_4" model="role.plaza_model.access">
         <field name="role_id" ref="role_auditor_ro"/>
-        <field name="module_label">Accounting</field>
-        <field name="model_name">account.payment</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_create" eval="False"/>
-        <field name="perm_write" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-        <field name="capability">none</field>
+        <field name="area">payments</field>
+        <field name="access_level">view</field>
         <field name="notes">Read-only.</field>
     </record>
 

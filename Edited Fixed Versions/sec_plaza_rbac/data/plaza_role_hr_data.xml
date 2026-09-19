@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Internal Security Programme
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl). -->
+<odoo>
+    <!--
+      Human-resources roles for the Plaza Model catalog.
+
+      The catalog shipped with sales, purchasing and finance roles only. HR was
+      absent entirely, which meant the Perfect HR mobile app had no declared
+      access to derive its navigation from, and — more importantly — that HR
+      duties were outside the segregation-of-duties checker and the monthly
+      access review while finance duties were inside them. Leave approval and
+      payroll preparation are exactly the kind of duties those controls exist
+      for.
+
+      **The separation encoded here.** Each role either originates a transaction
+      or approves it, never both — `_check_capability_has_transaction_type` and
+      the `create_approve` constraint reject the alternative on save, so this is
+      enforced rather than merely intended:
+
+        payroll_run       Payroll Officer creates -> HR Manager approves
+        employee_master   HR Officer creates      -> HR Manager approves
+        recruitment       HR Officer creates      -> HR Manager approves
+        leave_request                             -> Line Manager approves
+        attendance_record                         -> HR Officer approves
+
+      **Self-service lines deliberately carry no capability**, which is why the
+      last two have an approver and no originator. Segregation of duties governs
+      acting on someone else's record or on a company asset; a person acting on
+      their own record is not an SoD matter. Modelling self-service leave as a
+      `create` capability would pair every member of staff against the approver
+      role and raise a conflict for every line manager in the company — and a
+      control that fires on everyone is one nobody reads. The risk that does
+      matter, a manager approving their own request, is a record-rule question
+      and is not something a role catalog can answer.
+
+      **These lines declare intent, not enforcement.** Odoo's own ACLs and
+      record rules, reached through each role's backing group, are what actually
+      permit or refuse an operation. The declared matrix is what the SoD checker
+      and the review read, and what the mobile app reports alongside the real
+      permission check so the two can be compared. Do not assume adding a line
+      here grants anything.
+
+      Approval tiers follow the existing convention: tier_1 department head,
+      tier_2 compliance/functional lead, tier_3 CEO (reserved for role_ceo_owner
+      and not used here). Any role with a tier requires WebAuthn enrolment —
+      `requires_webauthn` computes from it — so the two HR approver roles below
+      will prompt their holders to enrol an authenticator.
+    -->
+
+    <!-- ================= Employee (self-service) ====================== -->
+    <record id="group_role_hr_employee" model="res.groups">
+        <field name="name">Plaza Role: Employee (Self-Service)</field>
+        <field name="comment">Sees and maintains their own HR record only: attendance, leave requests, payslips and profile. Approves nothing.</field>
+    </record>
+
+    <record id="role_hr_employee" model="role.plaza_model">
+        <field name="code">HR_EMPLOYEE</field>
+        <field name="name">Employee (Self-Service)</field>
+        <field name="sequence">200</field>
+        <field name="is_approval_tier">none</field>
+        <field name="group_id" ref="group_role_hr_employee"/>
+        <field name="description">Baseline role held by every member of staff. Records their own attendance, requests their own leave, and reads their own payslips and profile. Holds no approval capability of any kind, which is what makes the Line Manager's approval meaningful.</field>
+    </record>
+
+    <record id="access_hr_employee_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_employee"/>
+        <field name="area">attendance</field>
+        <field name="access_level">submit</field>
+        <field name="notes">Records own check-in and check-out. Deliberately carries NO capability: this is the subject acting on their own record, which is outside the scope of segregation of duties. Giving it one would pair every member of staff against the HR Officer and flag the entire company. Cannot edit a punch after the fact — that is a correction, which the HR Officer approves.</field>
+    </record>
+
+    <record id="access_hr_employee_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_employee"/>
+        <field name="area">leave</field>
+        <field name="access_level">submit</field>
+        <field name="notes">Submits and withdraws own leave. NO capability, for the same reason as the attendance line: every line manager is also an employee who books their own leave, so pairing self-service creation against the approver role would raise a segregation-of-duties conflict for every manager in the company — and a control that fires on everyone is one nobody reads. The risk that does matter, a manager approving their own request, is a record-rule question, not a role-catalog one.</field>
+    </record>
+
+    <record id="access_hr_employee_3" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_employee"/>
+        <field name="area">employees</field>
+        <field name="access_level">view</field>
+        <field name="notes">Reads own employee record. Record rules restrict this to self; the catalog cannot express that and does not try to.</field>
+    </record>
+
+    <!-- ================= Line Manager ================================= -->
+    <record id="group_role_hr_line_manager" model="res.groups">
+        <field name="name">Plaza Role: Line Manager</field>
+        <field name="comment">Approves leave for their own team and reads team attendance. Originates no leave or payroll transaction on behalf of others.</field>
+    </record>
+
+    <record id="role_hr_line_manager" model="role.plaza_model">
+        <field name="code">HR_LINE_MANAGER</field>
+        <field name="name">Line Manager</field>
+        <field name="sequence">210</field>
+        <field name="is_approval_tier">tier_1</field>
+        <field name="group_id" ref="group_role_hr_line_manager"/>
+        <field name="description">Department head for HR purposes. Approves leave for direct reports and reviews their attendance. Deliberately holds no create capability on leave: a manager who could both raise and approve a request would defeat the control, and the constraint on this model would reject the combination anyway.</field>
+    </record>
+
+    <record id="access_hr_line_manager_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_line_manager"/>
+        <field name="area">leave</field>
+        <field name="access_level">approve</field>
+        <field name="notes">Approves or refuses leave for direct reports. Write is the approval transition, not authorship of the request.</field>
+    </record>
+
+    <record id="access_hr_line_manager_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_line_manager"/>
+        <field name="area">attendance</field>
+        <field name="access_level">view</field>
+        <field name="notes">Reads team attendance. Cannot alter a punch — corrections belong to the HR Officer so that the reviewer is never the subject's own manager.</field>
+    </record>
+
+    <!-- ================= HR Officer =================================== -->
+    <record id="group_role_hr_officer" model="res.groups">
+        <field name="name">Plaza Role: HR Officer</field>
+        <field name="comment">Maintains employee master data and processes attendance corrections. Prepares, does not approve, payroll.</field>
+    </record>
+
+    <record id="role_hr_officer" model="role.plaza_model">
+        <field name="code">HR_OFFICER</field>
+        <field name="name">HR Officer</field>
+        <field name="sequence">220</field>
+        <field name="is_approval_tier">none</field>
+        <field name="group_id" ref="group_role_hr_officer"/>
+        <field name="description">Day-to-day HR operations. Creates and maintains employee records, processes attendance corrections, and handles recruitment administration. Holds no approval tier: their work is reviewed by the HR Manager.</field>
+    </record>
+
+    <record id="access_hr_officer_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_officer"/>
+        <field name="area">employees</field>
+        <field name="access_level">submit</field>
+        <field name="notes">Creates and maintains employee master data. Deletion is withheld: an employee record is evidence for payroll and attendance history and is archived, never removed.</field>
+    </record>
+
+    <record id="access_hr_officer_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_officer"/>
+        <field name="area">attendance</field>
+        <field name="access_level">approve</field>
+        <field name="notes">Processes attendance corrections raised by staff. The subject's own manager cannot do this, so the reviewer is independent of the reporting line.</field>
+    </record>
+
+    <record id="access_hr_officer_3" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_officer"/>
+        <field name="area">recruitment</field>
+        <field name="access_level">submit</field>
+        <field name="notes">Administers the recruitment pipeline. The hiring decision itself is the HR Manager's.</field>
+    </record>
+
+    <!-- ================= Payroll Officer ============================== -->
+    <record id="group_role_hr_payroll_officer" model="res.groups">
+        <field name="name">Plaza Role: Payroll Officer</field>
+        <field name="comment">Prepares payslips and payroll runs for approval. Cannot confirm or post them.</field>
+    </record>
+
+    <record id="role_hr_payroll_officer" model="role.plaza_model">
+        <field name="code">PAYROLL_OFFICER</field>
+        <field name="name">Payroll Officer</field>
+        <field name="sequence">230</field>
+        <field name="is_approval_tier">none</field>
+        <field name="group_id" ref="group_role_hr_payroll_officer"/>
+        <field name="description">Prepares payroll. Computes payslips and assembles the payroll run in draft, for approval by the HR Manager. The preparer and the approver of a payroll run must be different people — this is the single highest-value separation in the HR catalog, because a payroll run moves money to named individuals.</field>
+    </record>
+
+    <record id="access_hr_payroll_officer_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_payroll_officer"/>
+        <field name="area">payroll</field>
+        <field name="access_level">submit</field>
+        <field name="notes">Prepares payslips in draft. Model is hr.payslip from hr_payroll_community — this deployment runs the Open HRMS payroll, not Odoo Enterprise's.</field>
+    </record>
+
+    <record id="access_hr_payroll_officer_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_payroll_officer"/>
+        <field name="area">employees</field>
+        <field name="access_level">view</field>
+        <field name="notes">Reads contracts to compute pay. Cannot alter salary terms — that is employee master data, and altering it is how a preparer would otherwise pay themselves more.</field>
+    </record>
+
+    <!-- ================= HR Manager =================================== -->
+    <record id="group_role_hr_manager" model="res.groups">
+        <field name="name">Plaza Role: HR Manager</field>
+        <field name="comment">Approves payroll runs, employee master data changes and hiring decisions. Prepares none of them.</field>
+    </record>
+
+    <record id="role_hr_manager" model="role.plaza_model">
+        <field name="code">HR_MANAGER</field>
+        <field name="name">HR Manager</field>
+        <field name="sequence">240</field>
+        <field name="is_approval_tier">tier_2</field>
+        <field name="group_id" ref="group_role_hr_manager"/>
+        <field name="description">Functional lead for HR. Approves payroll runs prepared by the Payroll Officer, employee master data changes made by the HR Officer, and hiring decisions. Holds no create capability on any of them, so every HR transaction has a distinct preparer and approver. Tier 2 means holders must enrol a WebAuthn authenticator.</field>
+    </record>
+
+    <record id="access_hr_manager_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_manager"/>
+        <field name="area">payroll</field>
+        <field name="access_level">approve</field>
+        <field name="notes">Confirms payroll runs prepared by the Payroll Officer.</field>
+    </record>
+
+    <record id="access_hr_manager_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_manager"/>
+        <field name="area">employees</field>
+        <field name="access_level">approve</field>
+        <field name="notes">Approves employee master data changes, including salary-bearing fields.</field>
+    </record>
+
+    <record id="access_hr_manager_3" model="role.plaza_model.access">
+        <field name="role_id" ref="role_hr_manager"/>
+        <field name="area">recruitment</field>
+        <field name="access_level">approve</field>
+        <field name="notes">Makes the hiring decision on candidates progressed by the HR Officer.</field>
+    </record>
+
+    <!-- ================= CHRO ========================================= -->
+    <record id="group_role_chro" model="res.groups">
+        <field name="name">Plaza Role: CHRO</field>
+        <field name="comment">Reads the whole workforce for strategic oversight. Originates and approves no individual transaction.</field>
+    </record>
+
+    <record id="role_chro" model="role.plaza_model">
+        <field name="code">CHRO</field>
+        <field name="name">Chief Human Resources Officer</field>
+        <field name="sequence">250</field>
+        <field name="is_approval_tier">none</field>
+        <field name="group_id" ref="group_role_chro"/>
+        <field name="description">Strategic oversight of the workforce: headcount, attrition, cost and capability. Deliberately read-only on individual transactions. An executive who can also approve individual payroll runs or leave requests concentrates exactly the authority the tiered override workflow exists to split, and the reporting they need does not require write access to anything.</field>
+    </record>
+
+    <record id="access_chro_1" model="role.plaza_model.access">
+        <field name="role_id" ref="role_chro"/>
+        <field name="area">employees</field>
+        <field name="access_level">view</field>
+        <field name="notes">Whole-workforce read for reporting.</field>
+    </record>
+
+    <record id="access_chro_2" model="role.plaza_model.access">
+        <field name="role_id" ref="role_chro"/>
+        <field name="area">leave</field>
+        <field name="access_level">view</field>
+        <field name="notes">Absence trends only. No approval capability: see the role description.</field>
+    </record>
+
+    <!--
+      Give the HR roles a working set of Odoo groups.
+
+      A <function> call rather than implied_ids records with ref(), because
+      ref() needs the target module loaded, which would mean adding hr,
+      hr_holidays, hr_attendance and hr_recruitment to this module's
+      dependencies. sec_plaza_rbac governs finance and procurement too, and
+      forcing the whole HR stack onto a deployment that does not run it would be
+      wrong. The method looks each group up defensively and skips what is
+      absent, so this file installs cleanly with or without them.
+
+      Runs on install and on every upgrade, and is additive — see the method's
+      docstring for why nothing is ever removed.
+    -->
+    <function model="role.plaza_model" name="_apply_all_permission_grants"/>
+</odoo>

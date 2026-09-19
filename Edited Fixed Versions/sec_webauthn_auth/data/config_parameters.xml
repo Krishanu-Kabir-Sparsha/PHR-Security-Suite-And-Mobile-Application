@@ -31,4 +31,29 @@
         <field name="value">False</field>
     </record>
 
+    <!--
+        Android app binding for passkeys. Both must be set before the mobile app
+        can create or use a passkey for this domain; see
+        controllers/asset_links.py.
+
+        Shipped EMPTY, like rp_id above and for the same reason: the fingerprint
+        belongs to a signing key this module cannot know about, and a placeholder
+        would publish a claim that some other app is trusted here.
+
+        Get the value with:
+            keytool -list -v -keystore <your keystore> -alias <your alias>
+        and paste the SHA256 line. Several may be listed, comma-separated — a
+        locally-signed build and a Play-signed one have different fingerprints
+        and both need to be here if both are in use.
+    -->
+    <record id="param_android_package" model="ir.config_parameter">
+        <field name="key">sec_webauthn.android_package</field>
+        <field name="value"></field>
+    </record>
+
+    <record id="param_android_sha256" model="ir.config_parameter">
+        <field name="key">sec_webauthn.android_sha256</field>
+        <field name="value"></field>
+    </record>
+
 </odoo>

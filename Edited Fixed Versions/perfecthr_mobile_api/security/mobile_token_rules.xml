@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!--
+        The ACL grants every internal user read and unlink on
+        perfecthr.mobile.token so they can see and end their own sessions. On
+        its own that would also let them list and revoke everybody else's,
+        which is a denial-of-service against colleagues and a roster of who
+        uses the app from where. The rule below scopes it to the owner.
+
+        Deliberately NOT global: the second rule gives administrators the full
+        table, because someone has to be able to revoke the phone of a person
+        who has left. Two rules with the same non-global flag are OR'd for a
+        user holding both groups, which is what we want.
+    -->
+    <record id="rule_mobile_token_own" model="ir.rule">
+        <field name="name">Mobile token: own sessions only</field>
+        <field name="model_id" ref="model_perfecthr_mobile_token"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <record id="rule_mobile_token_admin" model="ir.rule">
+        <field name="name">Mobile token: administrators see all</field>
+        <field name="model_id" ref="model_perfecthr_mobile_token"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+</odoo>

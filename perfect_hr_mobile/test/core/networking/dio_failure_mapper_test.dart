@@ -69,6 +69,36 @@ void main() {
       expect(failure.uxState, FailureUxState.empty);
     });
 
+    test('404 keeps the server user_message when one is supplied', () {
+      // Regression. A 404 from this API is not always "no such page":
+      // /me/home returns one when the signed-in user has no hr.employee record
+      // linked, and the message names the remedy. The branch was dropping it,
+      // so the user was told "We couldn't find what you were looking for" —
+      // which sounds like an app fault and offers nothing to act on.
+      final failure = mapper.map(
+        _response(404, body: {
+          'user_message': 'No employee record is linked to your account yet. '
+              'Please ask HR to complete your profile.',
+          'code': 'no_employee_record',
+        }),
+      );
+
+      expect(failure, isA<NotFoundFailure>());
+      expect(failure.userMessage, contains('ask HR'));
+    });
+
+    test('404 without a user_message still reads as a safe default', () {
+      // The other half of the rule: a server body is only rendered when it
+      // arrives in the designated field, so an error page or a stack trace in
+      // the body can never become the message on screen.
+      final failure = mapper.map(
+        _response(404, body: {'detail': 'psycopg2.errors at hr_employee'}),
+      );
+
+      expect(failure.userMessage, isNot(contains('psycopg2')));
+      expect(failure.userMessage, contains("couldn't find"));
+    });
+
     test('409 → ValidationFailure with refresh guidance', () {
       final failure = mapper.map(_response(409));
       expect(failure, isA<ValidationFailure>());

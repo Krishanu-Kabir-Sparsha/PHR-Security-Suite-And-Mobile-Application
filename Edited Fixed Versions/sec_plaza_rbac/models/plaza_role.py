@@ -15,10 +15,44 @@ import logging
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from .plaza_areas import ACCESS_LEVELS, AREAS_BY_KEY
+
 _logger = logging.getLogger(__name__)
 
+
+class _NoArea:
+    """Stand-in for a permission line whose area is not set.
+
+    Only reachable on a line the upgrade could not convert, which is kept
+    deliberately rather than deleted. Treated as not self-service so such a
+    role is reported as granting nothing, which is true and is what should
+    draw somebody's attention to it.
+    """
+
+    self_service = False
+
+
+_NO_AREA = _NoArea()
+
 MIN_ACTIVE_ROLES = 10
-MAX_ACTIVE_ROLES = 20
+# Raised from 20 to 25 when the catalog was extended to cover human resources.
+#
+# PRD US-2.1 specified 20, and that figure was chosen while the catalog governed
+# one domain: sales, purchasing and finance. Adding HR brought a second domain
+# and six more roles, taking the shipped catalog to 21 -- so the ceiling was
+# rejecting a legitimate expansion of scope rather than the role proliferation
+# it exists to prevent.
+#
+# The bound is kept, and kept tight, because the failure it guards against is
+# real: a catalog that grows a role per person stops being a control and becomes
+# an inventory. 25 accommodates finance plus HR with four slots of headroom,
+# which still forces a deliberate decision -- and an archive -- rather than
+# unbounded growth.
+#
+# **This supersedes the figure in PRD US-2.1 and needs product sign-off.** If it
+# is rejected, the alternative is to archive an unused finance role rather than
+# to trim the HR set, which is sized by the duty separations it has to express.
+MAX_ACTIVE_ROLES = 25
 
 # Transaction classes used by the segregation-of-duties analysis (US-2.2).
 # Kept as a module-level constant so the SoD checker and the access matrix
@@ -32,6 +66,22 @@ TRANSACTION_TYPES = [
     ("journal_entry", "Journal Entry"),
     ("stock_move", "Stock Movement"),
     ("master_data", "Master Data (partners, products, pricing)"),
+    # --- Human resources -------------------------------------------------
+    # Added so HR is governed by the same catalog, the same segregation-of-
+    # duties checker and the same monthly review as finance. Without these the
+    # HR roles could carry no capability at all, because
+    # `_check_capability_has_transaction_type` requires a transaction class on
+    # any line that creates or approves -- so HR would have been present in the
+    # catalog but invisible to every control built on top of it.
+    #
+    # The split matters for the same reason it does in finance: the person who
+    # requests leave must not be the person who approves it, and the person who
+    # prepares payroll must not be the person who posts it.
+    ("leave_request", "Leave Request"),
+    ("attendance_record", "Attendance Record"),
+    ("payroll_run", "Payroll Run"),
+    ("employee_master", "Employee Master Data"),
+    ("recruitment", "Recruitment Decision"),
 ]
 
 CAPABILITIES = [
@@ -151,6 +201,23 @@ class PlazaRole(models.Model):
         "forensic audit (BRD FR-2.3).",
     )
 
+    granted_summary = fields.Char(
+        string="Gives Access To",
+        compute="_compute_granted_access",
+        help="What a holder of this role can actually reach in Perfect HR. "
+        "Derived from the Permissions tab; there is nothing to configure here. "
+        "Shown so that what a role confers is visible without having to read "
+        "it out of the permission lines one by one.",
+    )
+    grants_nothing = fields.Boolean(
+        string="Declares Access It Does Not Grant",
+        compute="_compute_grants_nothing",
+        help="True when the role has permissions set but none of them confer "
+        "any access. Surfaced on the form because a role that looks "
+        "configured and grants nothing is the hardest kind of mistake to "
+        "notice from the outside.",
+    )
+
     _sql_constraints = [
         (
             "code_uniq",
@@ -158,6 +225,99 @@ class PlazaRole(models.Model):
             "A Plaza role with this code already exists. Role codes must be unique.",
         ),
     ]
+
+    def _apply_permission_grants(self):
+        """Give the backing group exactly the access the permission lines imply.
+
+        This is what makes the Permissions tab real. Each line names an area and
+        a level; the area knows what access each level confers; this writes the
+        union of that onto the role's backing group, which is what Perfect HR
+        consults when it decides whether an operation is allowed.
+
+        Called on create and on every save, so there is no separate step to
+        forget. Before this existed the two had to be configured independently,
+        and a role could describe access nobody actually had.
+
+        **Only ever adds.** Access set deliberately outside the catalog --
+        during an incident, or for something the areas do not model yet --
+        survives. Quietly revoking access because a permission line was removed
+        would break somebody mid-task with no trace of why; removals are made on
+        purpose, by a person, in Settings.
+        """
+        for role in self:
+            wanted_names = []
+            for line in role.access_line_ids:
+                definition = AREAS_BY_KEY.get(line.area)
+                if not definition or not line.access_level:
+                    continue
+                wanted_names.extend(definition.access_for(line.access_level))
+
+            wanted = self.env["res.groups"]
+            for name in dict.fromkeys(wanted_names):
+                found = self.env.ref(name, raise_if_not_found=False)
+                if found:
+                    wanted |= found
+                else:
+                    # Routine: this module governs finance, procurement and HR,
+                    # and a deployment need not run all three.
+                    _logger.debug("Access %s not present; skipped", name)
+
+            group = role.group_id or role._ensure_backing_group()
+            missing = wanted - group.sudo().implied_ids
+            if not missing:
+                continue
+
+            group.sudo().write(
+                {"implied_ids": [fields.Command.link(gid) for gid in missing.ids]}
+            )
+            role.message_post(
+                body=_(
+                    "Permissions applied. This role now also gives: %(names)s",
+                    names=", ".join(missing.mapped("name")),
+                )
+            )
+            _logger.info(
+                "Role %s now grants %s", role.code, ", ".join(missing.mapped("name"))
+            )
+
+    @api.model
+    def _apply_all_permission_grants(self):
+        """Re-apply every role's grants. Called from the data file on upgrade."""
+        self.search([]).sudo()._apply_permission_grants()
+
+    @api.depends("access_line_ids.area", "access_line_ids.access_level")
+    def _compute_granted_access(self):
+        levels = dict(ACCESS_LEVELS)
+        for role in self:
+            parts = []
+            for line in role.access_line_ids:
+                definition = AREAS_BY_KEY.get(line.area)
+                if not definition or line.access_level in (None, False, "none"):
+                    continue
+                parts.append(
+                    "%s (%s)" % (definition.label, levels.get(line.access_level, ""))
+                )
+            role.granted_summary = ", ".join(parts)
+
+    @api.depends("access_line_ids.area", "access_line_ids.access_level", "group_id")
+    def _compute_grants_nothing(self):
+        for role in self:
+            has_lines = any(
+                line.access_level not in (None, False, "none")
+                for line in role.access_line_ids
+            )
+            confers = bool(role.group_id and role.group_id.sudo().implied_ids)
+            # Self-service areas legitimately confer nothing extra: Perfect HR's
+            # baseline access already covers acting on your own records. A role
+            # made only of those is complete, not broken.
+            only_self_service = all(
+                (AREAS_BY_KEY.get(line.area) or _NO_AREA).self_service
+                for line in role.access_line_ids
+                if line.access_level not in (None, False, "none")
+            )
+            role.grants_nothing = bool(
+                has_lines and not confers and not only_self_service
+            )
 
     @api.depends("access_line_ids")
     def _compute_access_line_count(self):
@@ -287,7 +447,21 @@ class PlazaRole(models.Model):
         roles = super().create(vals_list)
         for role in roles:
             role._ensure_backing_group()
+        # Apply immediately, so a role created with permissions already on it
+        # confers them without a second save. There is no separate "apply" step
+        # anywhere, by design: the gap between describing a role and granting it
+        # is exactly where the catalog used to drift from the system.
+        roles._apply_permission_grants()
         return roles
+
+    def write(self, vals):
+        result = super().write(vals)
+        # Only when the permissions actually changed. Renaming a role or editing
+        # its description should not touch anybody's access, and re-applying on
+        # every save would put a chatter entry on the role each time.
+        if "access_line_ids" in vals:
+            self._apply_permission_grants()
+        return result
 
     # Depends on the group's membership, not just on which group is linked.
     # With only "group_id" here, adding or removing a user from the backing
@@ -432,311 +606,3 @@ class PlazaRole(models.Model):
             "view_mode": "list,form",
             "domain": [("id", "in", self.user_ids.ids)],
         }
-
-
-class PlazaRoleAccess(models.Model):
-    """One row of a role's module/field-level access matrix."""
-
-    _name = "role.plaza_model.access"
-    _description = "Plaza Model Role Access Matrix Line"
-    _order = "role_id, model_name"
-
-    role_id = fields.Many2one(
-        comodel_name="role.plaza_model",
-        string="Role",
-        required=True,
-        ondelete="cascade",
-        index=True,
-        help="The Plaza role this access line belongs to.",
-    )
-    # ------------------------------------------------------------------
-    # Module / model selection
-    # ------------------------------------------------------------------
-    # module_id and model_id are the fields people actually use; module_label
-    # and model_name below remain the stored truth. Keeping both is deliberate:
-    # the unique SQL constraint, _order, the seeded catalog in
-    # data/plaza_role_data.xml and the SoD error messages all read model_name,
-    # and a role catalog that could only ever name installed models would lose
-    # the ability to describe a role before its module is deployed.
-    module_id = fields.Many2one(
-        comodel_name="ir.module.module",
-        string="Module",
-        # Deliberately NOT restrict. Uninstalling a module deletes its ir.model
-        # rows, and a restrict here would make the RBAC catalog able to veto an
-        # uninstall -- a surprising failure a long way from its cause. On
-        # set null the picker empties and module_label / model_name survive,
-        # which is the graceful degradation the original text fields were
-        # chosen for in the first place.
-        ondelete="set null",
-        domain=[("state", "=", "installed")],
-        help="Installed module this access line belongs to. Choosing one "
-        "narrows the Model list to that module's models.",
-    )
-    model_id = fields.Many2one(
-        comodel_name="ir.model",
-        string="Model",
-        ondelete="set null",  # see the note on module_id above
-        compute="_compute_model_id",
-        store=True,
-        readonly=False,
-        help="Model the access applies to, limited to the chosen module.",
-    )
-    allowed_model_ids = fields.Many2many(
-        comodel_name="ir.model",
-        string="Selectable Models",
-        compute="_compute_allowed_model_ids",
-        help="Technical helper: the models the chosen module defines or "
-        "extends. Drives the domain on Model; not shown to users.",
-    )
-    # These two stay plain stored columns, NOT computed from the pickers.
-    # model_id already declares @api.depends("model_name"); making model_name
-    # compute from model_id in turn would be a declared dependency cycle, which
-    # Odoo rejects when it builds the registry. They are kept in step through
-    # onchange (for the UI) and create/write (for imports and RPC) instead --
-    # a runtime relationship, which the dependency graph never sees.
-    model_name = fields.Char(
-        string="Technical Model",
-        required=True,
-        help="Technical model name the access applies to, e.g. sale.order. "
-        "Stored as text so the matrix can be authored before the target "
-        "module is installed.",
-    )
-    module_label = fields.Char(
-        string="Module Label",
-        required=True,
-        help="Business-facing module label, e.g. Sales, Purchase, Accounting.",
-    )
-    perm_read = fields.Boolean(string="Read", default=True)
-    perm_create = fields.Boolean(string="Create", default=False)
-    perm_write = fields.Boolean(string="Write", default=False)
-    perm_unlink = fields.Boolean(string="Delete", default=False)
-    field_restrictions = fields.Char(
-        string="Restricted Fields",
-        help="Comma-separated list of fields on this model that the role may "
-        "NOT read or write, enforced via groups= on the field definition. "
-        "Leave empty for no field-level restriction.",
-    )
-    transaction_type = fields.Selection(
-        selection=TRANSACTION_TYPES,
-        string="Transaction Class",
-        help="Which class of business transaction this line governs. Required "
-        "for any line that carries a create or approve capability, because "
-        "the segregation-of-duties checker groups by this value.",
-    )
-    capability = fields.Selection(
-        selection=CAPABILITIES,
-        string="Capability",
-        default="none",
-        required=True,
-        help="Whether the role can originate the transaction, approve it, or "
-        "both. 'Create and Approve' on a single role is a segregation-of-"
-        "duties violation by definition and is rejected on save.",
-    )
-    notes = fields.Char(
-        string="Notes",
-        help="Rationale for this access line, shown during the monthly review.",
-    )
-
-    _sql_constraints = [
-        (
-            "role_model_uniq",
-            "unique(role_id, model_name)",
-            "Each model may appear only once in a role's access matrix.",
-        ),
-    ]
-
-    # ------------------------------------------------------------------
-    # Resolving a module to its models
-    # ------------------------------------------------------------------
-    @api.model
-    def _models_for_modules(self, module_names):
-        """Map each module name to the ir.model records it may offer.
-
-        Odoo records the link as external IDs: every module that defines *or
-        extends* a model gets an ``ir.model.data`` row pointing at it. That is
-        exactly what ``ir.model.modules`` displays as "In Apps", and it is the
-        behaviour we want here -- ``sale`` should be able to grant access to
-        ``res.partner``, which it extends rather than defines. The seeded
-        catalog already assumes this (its Sales roles cover res.partner).
-
-        ``ir.model.modules`` itself is computed and not stored, so it cannot be
-        used in a domain; this reads the same source directly.
-
-        Excluded, per the agreed scope:
-
-        * transient models -- wizards are a UI mechanism, not a thing a role
-          holds standing rights over;
-        * abstract models -- mixins have no table, so an ACL on one is
-          meaningless and Odoo would refuse it anyway.
-        """
-        if not module_names:
-            return {}
-        data = (
-            self.env["ir.model.data"]
-            .sudo()
-            .search(
-                [
-                    ("model", "=", "ir.model"),
-                    ("module", "in", list(module_names)),
-                ]
-            )
-        )
-        by_module = {name: [] for name in module_names}
-        for row in data:
-            by_module.setdefault(row.module, []).append(row.res_id)
-
-        IrModel = self.env["ir.model"].sudo()
-        result = {}
-        for name, res_ids in by_module.items():
-            records = IrModel.browse(res_ids).exists()
-            keep = IrModel.browse()
-            for record in records:
-                target = self.env.get(record.model)
-                # Absent from the registry: the xmlid outlived the model.
-                if target is None or target._abstract or target._transient:
-                    continue
-                keep |= record
-            result[name] = keep
-        return result
-
-    @api.depends("module_id")
-    def _compute_allowed_model_ids(self):
-        names = {line.module_id.name for line in self if line.module_id}
-        by_module = self._models_for_modules(names)
-        empty = self.env["ir.model"]
-        for line in self:
-            line.allowed_model_ids = by_module.get(line.module_id.name, empty)
-
-    @api.depends("model_name")
-    def _compute_model_id(self):
-        """Backfill the picker from the stored technical name.
-
-        Runs for rows authored before this field existed -- the seeded catalog
-        and anything created from XML data, which set model_name directly. It
-        is store=True + readonly=False, so a value chosen by hand is kept; only
-        a change to model_name re-derives it.
-        """
-        for line in self:
-            if not line.model_name:
-                line.model_id = False
-                continue
-            if line.model_id and line.model_id.model == line.model_name:
-                continue
-            line.model_id = (
-                self.env["ir.model"]
-                .sudo()
-                .search([("model", "=", line.model_name)], limit=1)
-            )
-
-    # ------------------------------------------------------------------
-    # Keeping the pickers and the stored text in step
-    # ------------------------------------------------------------------
-    # Deliberately NOT a backfill for module_id. Matching the seeded labels
-    # against installed modules is unreliable and, worse, confidently wrong:
-    # on this database "Sales" resolves to sale_management rather than sale,
-    # while "Accounting", "Inventory" and "Settings" match nothing at all.
-    # Guessing would either stamp the wrong module on a role or trip
-    # _check_model_belongs_to_module during the upgrade and abort it. Existing
-    # rows therefore keep an empty picker and their module_label text; someone
-    # sets the module the next time they edit the line, which is a visible
-    # to-do rather than a silent wrong answer.
-    @staticmethod
-    def _sync_from_pickers(vals, env):
-        """Fill module_label / model_name from the pickers in ``vals``.
-
-        Applied on create and write so that a line written over RPC or by an
-        import behaves like one edited in the form, rather than failing the
-        required-field check on columns the caller never heard of.
-        """
-        if vals.get("model_id") and not vals.get("model_name"):
-            model = env["ir.model"].sudo().browse(vals["model_id"]).exists()
-            if model:
-                vals["model_name"] = model.model
-        if vals.get("module_id") and not vals.get("module_label"):
-            module = env["ir.module.module"].sudo().browse(vals["module_id"]).exists()
-            if module:
-                vals["module_label"] = module.shortdesc or module.name
-        return vals
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        return super().create(
-            [self._sync_from_pickers(dict(vals), self.env) for vals in vals_list]
-        )
-
-    def write(self, vals):
-        return super().write(self._sync_from_pickers(dict(vals), self.env))
-
-    @api.onchange("model_id")
-    def _onchange_model_id(self):
-        """Mirror the chosen model into the stored technical name."""
-        if self.model_id:
-            self.model_name = self.model_id.model
-
-    @api.onchange("module_id")
-    def _onchange_module_id(self):
-        """Mirror the label, and drop a model outside the new module."""
-        if self.module_id:
-            self.module_label = self.module_id.shortdesc or self.module_id.name
-        if self.model_id and self.model_id not in self.allowed_model_ids:
-            self.model_id = False
-            self.model_name = False
-
-    @api.constrains("module_id", "model_id")
-    def _check_model_belongs_to_module(self):
-        """The pair must be coherent however it was written.
-
-        The view domain covers the UI; this covers imports, XML data and
-        anything written over RPC, where a mismatched pair would otherwise be
-        accepted and then read as authoritative during the monthly review.
-        """
-        for line in self:
-            if not line.module_id or not line.model_id:
-                continue
-            allowed = line._models_for_modules({line.module_id.name}).get(
-                line.module_id.name
-            )
-            if allowed is not None and line.model_id not in allowed:
-                raise ValidationError(
-                    _(
-                        "Model '%(model)s' is not part of module '%(module)s'. "
-                        "Pick a model the module defines or extends, or change "
-                        "the module.",
-                        model=line.model_id.model,
-                        module=line.module_id.shortdesc or line.module_id.name,
-                    )
-                )
-
-    @api.constrains("capability", "transaction_type")
-    def _check_capability_has_transaction_type(self):
-        for line in self:
-            if line.capability != "none" and not line.transaction_type:
-                raise ValidationError(
-                    _(
-                        "Access line '%(model)s' on role '%(role)s' declares a "
-                        "capability but no transaction class. The segregation-of-"
-                        "duties checker cannot evaluate it without one.",
-                        model=line.model_name,
-                        role=line.role_id.code,
-                    )
-                )
-
-    @api.constrains("capability")
-    def _check_no_intra_role_sod_breach(self):
-        """A single role may never grant both create and approve.
-
-        This is the strongest form of BRD FR-2.4: it makes the violation
-        impossible to author in the first place, rather than only detectable
-        afterwards by the cross-role SoD report.
-        """
-        for line in self:
-            if line.capability == "create_approve":
-                raise ValidationError(
-                    _(
-                        "Role '%(role)s' would grant both creation and approval "
-                        "rights over %(txn)s in a single role. Split these into "
-                        "two roles (BRD FR-2.4).",
-                        role=line.role_id.code,
-                        txn=dict(TRANSACTION_TYPES).get(line.transaction_type, ""),
-                    )
-                )

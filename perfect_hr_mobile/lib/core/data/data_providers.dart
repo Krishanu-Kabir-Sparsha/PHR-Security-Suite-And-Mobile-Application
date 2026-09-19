@@ -17,10 +17,26 @@ import 'cache_store.dart';
 enum DataSourceMode { live, mock }
 
 class DataSourceModeController extends Notifier<DataSourceMode> {
+  /// A base URL still pointing at the placeholder domain means no backend has
+  /// been configured yet. `.example` is reserved by RFC 2606 and can never
+  /// resolve, so this is a reliable signal rather than a guess.
+  static bool get _backendUnconfigured =>
+      AppConfig.current.apiBaseUrl.contains('.example');
+
   @override
   DataSourceMode build() {
-    // Live by default even in dev: a feature must opt into mocks explicitly,
-    // so nobody demos mock data believing it came from the backend.
+    // Live by default: a feature must opt into mocks explicitly, so nobody
+    // demos mock data believing it came from the backend.
+    //
+    // The one exception is a dev/qa build whose API host is still the
+    // placeholder. There, "live" cannot mean anything except a network error on
+    // every screen, which teaches nothing about the app. Falling back to mocks
+    // is deliberately conditional on the URL, not on the flavour, so it
+    // corrects itself the moment a real host is configured — there is no flag
+    // to remember to turn off before a demo.
+    if (AppConfig.current.allowsDevTools && _backendUnconfigured) {
+      return DataSourceMode.mock;
+    }
     return DataSourceMode.live;
   }
 

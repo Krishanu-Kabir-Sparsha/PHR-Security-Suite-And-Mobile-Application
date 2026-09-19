@@ -50,9 +50,15 @@ class DioFailureMapper {
     return switch (error.type) {
       DioExceptionType.badResponse => _mapResponse(error, technical),
 
+      // transformTimeout is Dio's response-transformer timeout. It is a timeout
+      // like the others and reads the same way to a user, so it joins this
+      // group. Listed explicitly rather than caught by a wildcard: an
+      // unmatched DioExceptionType should keep failing analysis, so a future
+      // Dio release cannot quietly fall into a generic bucket.
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
-      DioExceptionType.receiveTimeout =>
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.transformTimeout =>
         NetworkFailure(
           userMessage:
               'Perfect HR is taking longer than usual to respond. '
@@ -69,6 +75,7 @@ class DioFailureMapper {
       DioExceptionType.badCertificate => const ServerFailure(
           userMessage: "We couldn't establish a secure connection. "
               'Please try again on a trusted network.',
+          isRetryable: false,
         ).withTechnical(technical),
 
       DioExceptionType.cancel => UnknownFailure(
@@ -107,7 +114,17 @@ class DioFailureMapper {
           technical: technical,
         ),
 
-      404 => NotFoundFailure(technical: technical),
+      // The safe message matters more here than anywhere else. A 404 from this
+      // API is not always "that page does not exist": /me/home returns one when
+      // the signed-in user has no hr.employee record linked yet, and says so in
+      // user_message along with what to do about it. Dropping that left the
+      // user with "We couldn't find what you were looking for", which explains
+      // nothing and suggests the app is at fault.
+      404 => NotFoundFailure(
+          userMessage:
+              safeMessage ?? "We couldn't find what you were looking for.",
+          technical: technical,
+        ),
 
       // Workflow conflict, e.g. already checked in, or approving a request
       // another approver has already actioned.
@@ -213,8 +230,13 @@ class DioFailureMapper {
 
 extension on ServerFailure {
   /// Attaches diagnostics to a const-declared failure without duplicating copy.
+  ///
+  /// isRetryable must be carried across. Omitting it silently reset the flag to
+  /// its default of true, which is how the certificate case ended up offering a
+  /// Try Again despite being constructed with isRetryable: false.
   ServerFailure withTechnical(String technical) => ServerFailure(
         userMessage: userMessage,
         technical: technical,
+        isRetryable: isRetryable,
       );
 }

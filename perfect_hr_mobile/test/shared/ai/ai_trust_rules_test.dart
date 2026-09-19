@@ -204,7 +204,7 @@ void main() {
     testWidgets('follows Recommendation → Why → Authority', (tester) async {
       await tester.pumpWidget(
         _wrap(
-          const AiExplainabilityPanel(
+          AiExplainabilityPanel(
             conclusion: 'Recommended: APPROVE',
             reasons: _reasons,
             confidence: 0.89,
