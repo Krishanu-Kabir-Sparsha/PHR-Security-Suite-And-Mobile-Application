@@ -10,6 +10,11 @@ abstract final class AppRoutes {
   static const String mfa = '/login/mfa';
   static const String biometric = '/login/biometric';
 
+  /// Reachable without a session, by necessity: a handset cannot sign in until
+  /// it is paired, so a pairing screen behind the session gate would be a door
+  /// locked from the inside.
+  static const String pairDevice = '/login/pair';
+
   // Shell branch roots — one per bottom-navigation destination.
   static const String home = '/home';
   static const String attendance = '/attendance';

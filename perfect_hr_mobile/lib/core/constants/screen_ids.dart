@@ -12,6 +12,14 @@ abstract final class ScreenIds {
   static const String authMfa = 'AUTH-03';
   static const String authBiometric = 'AUTH-04';
 
+  /// Postdates the Blueprint. Device pairing did not exist when it was
+  /// written: the design assumed a native app could reach a passkey, which
+  /// needs the OS vendor to validate an app-to-domain association on the
+  /// handset, and that validation fails closed with nothing actionable to
+  /// diagnose. The ID is allocated here rather than left blank so the screen
+  /// stays traceable under §20; fold it into the Blueprint at the next revision.
+  static const String authPairDevice = 'AUTH-05';
+
   // Employee — Blueprint §9–24
   static const String employeeHome = 'E-01';
   static const String attendanceHome = 'E-02';

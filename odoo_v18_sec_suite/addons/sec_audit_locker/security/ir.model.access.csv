@@ -1,8 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_locker_entry_viewer,audit.locker.entry viewer,model_audit_locker_entry,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
-access_locker_entry_compliance,audit.locker.entry compliance,model_audit_locker_entry,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_locker_chain_viewer,audit.locker.chain viewer,model_audit_locker_chain,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_replica_target_viewer,audit.replica.target viewer,model_audit_replica_target,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
-access_replica_target_super,audit.replica.target super admin,model_audit_replica_target,sec_plaza_rbac.group_security_super_admin,1,1,1,0
-access_reconciliation_run_viewer,audit.reconciliation.run viewer,model_audit_reconciliation_run,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
-access_reconciliation_run_compliance,audit.reconciliation.run compliance,model_audit_reconciliation_run,sec_plaza_rbac.group_plaza_compliance,1,0,1,0

@@ -86,6 +86,26 @@ class AttendanceToggleController extends AsyncNotifier<AttendanceToggleResult?> 
       return null;
     }
   }
+
+  /// Close a session left open on an earlier day, then reload both screens.
+  ///
+  /// Separate from [toggle] rather than folded into it. A toggle on a stale
+  /// session would check the person out at *now*, turning a forgotten Thursday
+  /// into a 48-hour shift that flows straight into worked hours and overtime.
+  /// This asks the server to close it at the end of the day it belongs to.
+  Future<bool> resolveStale() async {
+    state = const AsyncValue.loading();
+    try {
+      await ref.read(attendanceRepositoryProvider).resolveStale();
+      state = const AsyncValue.data(null);
+      ref.invalidate(attendanceProvider);
+      unawaited(ref.read(employeeHomeProvider.notifier).invalidateAndReload());
+      return true;
+    } catch (error, stack) {
+      state = AsyncValue.error(error, stack);
+      return false;
+    }
+  }
 }
 
 /// Fire-and-forget without the lint complaining, and without letting a failure

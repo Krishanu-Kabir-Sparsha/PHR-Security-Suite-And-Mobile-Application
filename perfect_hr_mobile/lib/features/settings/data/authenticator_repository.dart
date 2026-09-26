@@ -15,6 +15,26 @@ import '../domain/authenticator_status.dart';
 /// It also fails honestly offline rather than serving a remembered answer.
 abstract interface class AuthenticatorRepository {
   Future<AuthenticatorStatus> loadStatus();
+
+  /// A challenge for the device the user already holds, or null when they hold
+  /// none.
+  ///
+  /// Adding a second device requires proving control of the first, in the same
+  /// request that stores the new one. A first enrolment needs no such proof,
+  /// and null says so — which is what decides whether the user sees one prompt
+  /// or two.
+  Future<Map<String, dynamic>?> stepUpChallenge();
+
+  /// Creation options for a new credential, from the server.
+  Future<Map<String, dynamic>> enrolmentOptions();
+
+  /// Register the new credential. [assertion] is the step-up, when there was
+  /// one, and travels in the same request on purpose.
+  Future<AuthenticatorStatus> completeEnrolment({
+    required Map<String, dynamic> credential,
+    required String deviceLabel,
+    Map<String, dynamic>? assertion,
+  });
 }
 
 class ApiAuthenticatorRepository implements AuthenticatorRepository {
@@ -46,7 +66,48 @@ class ApiAuthenticatorRepository implements AuthenticatorRepository {
   @override
   Future<AuthenticatorStatus> loadStatus() async {
     final body = await _client.get<Map<String, dynamic>>('/me/authenticators');
-    return AuthenticatorStatus.fromJson(body ?? const {});
+    return AuthenticatorStatus.fromJson(body);
+  }
+
+  /// `POST /me/authenticators/step-up`
+  @override
+  Future<Map<String, dynamic>?> stepUpChallenge() async {
+    final body = await _client.post<Map<String, dynamic>>(
+      '/me/authenticators/step-up',
+    );
+    if (body['required'] != true) return null;
+    final options = body['options'];
+    return options is Map ? options.cast<String, dynamic>() : null;
+  }
+
+  /// `POST /me/authenticators/options`
+  @override
+  Future<Map<String, dynamic>> enrolmentOptions() async {
+    return _client.post<Map<String, dynamic>>('/me/authenticators/options');
+  }
+
+  /// `POST /me/authenticators/verify`
+  ///
+  /// The credential and the step-up assertion go together. A marker set by a
+  /// separate call would already be gone by the time this one arrived, which is
+  /// exactly why adding a second device used to be impossible.
+  @override
+  Future<AuthenticatorStatus> completeEnrolment({
+    required Map<String, dynamic> credential,
+    required String deviceLabel,
+    Map<String, dynamic>? assertion,
+  }) async {
+    final body = await _client.post<Map<String, dynamic>>(
+      '/me/authenticators/verify',
+      data: <String, Object?>{
+        'credential': credential,
+        'device_label': deviceLabel,
+        if (assertion != null) 'assertion': assertion,
+      },
+    );
+    // The verify response carries the new counts but not the device list, so
+    // the screen re-reads rather than rendering a half-populated status.
+    return loadStatus().catchError((_) => AuthenticatorStatus.fromJson(body));
   }
 }
 
@@ -86,4 +147,19 @@ class MockAuthenticatorRepository implements AuthenticatorRepository {
 
   @override
   Future<AuthenticatorStatus> loadStatus() async => status ?? sample();
+
+  @override
+  Future<Map<String, dynamic>?> stepUpChallenge() async => null;
+
+  @override
+  Future<Map<String, dynamic>> enrolmentOptions() async =>
+      const {'challenge': 'mock'};
+
+  @override
+  Future<AuthenticatorStatus> completeEnrolment({
+    required Map<String, dynamic> credential,
+    required String deviceLabel,
+    Map<String, dynamic>? assertion,
+  }) async =>
+      status ?? sample();
 }

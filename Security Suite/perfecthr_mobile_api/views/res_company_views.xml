@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Mobile sign-in rules, on the company form.
+
+        Placed on res.company rather than in Settings on purpose. These are
+        per-company answers, and Settings is per-user-and-current-company: an
+        administrator configuring a four-company tenant from Settings would
+        have to switch company four times and would have no page showing them
+        all four answers side by side. The company form already is that page.
+    -->
+    <record id="view_company_form_mobile_login" model="ir.ui.view">
+        <field name="name">res.company.form.mobile.login</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Mobile Sign-in" name="mobile_login">
+                    <group>
+                        <group string="Who may choose this company">
+                            <field name="mobile_login_enabled"/>
+                            <div class="text-muted" colspan="2">
+                                The company picker in the app is drawn
+                                <b>before anyone signs in</b>, so anything
+                                listed there is readable by anyone who knows
+                                your Perfect HR address.
+                                <br/>
+                                Leave this off unless people genuinely have to
+                                choose between companies. With nothing ticked
+                                the app skips the step and each person lands in
+                                their own company, which is right for most
+                                tenants.
+                                <br/><br/>
+                                Which people may sign into this company is not
+                                set here: it is the
+                                <b>Allowed Companies</b> list on each user,
+                                which is the same list the web client uses.
+                            </div>
+                        </group>
+                        <group string="How they must prove who they are">
+                            <field name="mobile_auth_policy"/>
+                            <div class="text-muted" colspan="2">
+                                <b>Advanced</b> asks for a fingerprint on a
+                                paired handset, so a stolen password alone is
+                                not enough to sign in.
+                                <b>Basic</b> accepts the password by itself.
+                                <br/><br/>
+                                This setting cannot weaken an approver. Anyone
+                                holding an approval tier, the strong-
+                                authentication flag, or an administrator group
+                                is always required to use the advanced path,
+                                whatever is chosen here.
+                            </div>
+                        </group>
+                    </group>
+                    <group string="Attendance">
+                        <group>
+                            <field name="mobile_auto_checkin"/>
+                        </group>
+                        <div class="text-muted" colspan="2">
+                            Checks the employee in on their first mobile
+                            sign-in of the day. Nothing is recorded if today
+                            already has attendance from a fingerprint device,
+                            the kiosk or another handset, or if they are on
+                            approved leave.
+                            <br/>
+                            Checking <b>out</b> is never automatic. Signing out
+                            of the app does not end an attendance record.
+                        </div>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

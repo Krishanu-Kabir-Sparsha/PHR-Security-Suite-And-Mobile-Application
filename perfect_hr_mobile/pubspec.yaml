@@ -38,8 +38,23 @@ dependencies:
   url_launcher: ^6.3.1
   # Bearer tokens live in Keystore/Keychain, never in the Drift cache:
   # that database is deliberately unencrypted (risk R9) and is safe only
-  # while sensitive material stays out of it.
+  # while sensitive material stays out of it. The paired-device private key
+  # lives here too, under its own key and never read without a biometric
+  # check first -- see core/security/device_key_service.dart.
   flutter_secure_storage: ^9.2.2
+  # Device binding. Chosen over the platform passkey APIs because those need
+  # the OS vendor to validate an app-to-domain association on the handset,
+  # which fails closed and unactionably; see the module docstring on the
+  # server's sec_webauthn_auth/models/device_binding.py.
+  #
+  # Both are supported on Android, iOS, macOS and Windows, which is what lets
+  # one code path cover every platform this app targets. local_auth has no
+  # Linux or web implementation, so DeviceKeyService reports unavailable there
+  # rather than silently signing without a user-presence check.
+  local_auth: ^2.3.0
+  # Ed25519 in pure Dart, so signing behaves identically everywhere rather
+  # than depending on four native implementations agreeing with each other.
+  cryptography: ^2.7.0
 
   # --- Declared-but-unused plugins, removed 2026-09-10 ---------------------
   # These were declared "for planning" and imported by nothing (verified with

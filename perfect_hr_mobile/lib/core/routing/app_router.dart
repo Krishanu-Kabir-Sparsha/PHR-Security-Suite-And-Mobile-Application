@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/authentication/presentation/welcome_screen.dart';
+import '../../features/approvals/presentation/approvals_screen.dart';
 import '../../features/attendance/presentation/attendance_screen.dart';
 import '../../features/leave/presentation/leave_screen.dart';
 import '../../features/dashboard/presentation/employee_home_screen.dart';
@@ -14,6 +15,7 @@ import '../session/session_state.dart';
 import '../session/user_role.dart';
 import 'app_routes.dart';
 import '../../features/authentication/presentation/login_screen.dart';
+import '../../features/authentication/presentation/pair_device_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/security_screen.dart';
 import 'nav_profile.dart';
@@ -58,6 +60,20 @@ GoRouter _buildRouter(
       if (current is! SessionAuthenticated) {
         return isAuthRoute ? null : AppRoutes.welcome;
       }
+
+      // Signed in on a password alone, with no security device registered.
+      //
+      // The server restricts this session to the enrolment endpoints, so
+      // sending them anywhere else produces a 403 on every screen with nothing
+      // to explain it — which reads as a broken app rather than as a step they
+      // have not finished. Held here rather than on each screen so there is one
+      // way in and no screen that forgot.
+      if (current.enrolmentRequired) {
+        return target.startsWith(AppRoutes.security)
+            ? null
+            : AppRoutes.security;
+      }
+
       // Authenticated users are pushed out of the authentication flow.
       if (isAuthRoute) return AppRoutes.home;
       return null;
@@ -74,6 +90,11 @@ GoRouter _buildRouter(
         name: ScreenIds.authLogin,
         builder: (_, __) => const LoginScreen(),
         routes: [
+          GoRoute(
+            path: 'pair',
+            name: ScreenIds.authPairDevice,
+            builder: (_, __) => const PairDeviceScreen(),
+          ),
           GoRoute(
             path: 'mfa',
             name: ScreenIds.authMfa,
@@ -139,6 +160,11 @@ GoRouter _buildRouter(
             plannedTask: 'Task 8 — Notifications',
           ),
         ),
+      GoRoute(
+        path: AppRoutes.approvals,
+        name: ScreenIds.approvalInbox,
+        builder: (_, __) => const ApprovalsScreen(),
+      ),
       GoRoute(
         path: AppRoutes.search,
         name: ScreenIds.globalSearch,

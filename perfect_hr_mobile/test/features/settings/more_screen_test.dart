@@ -7,6 +7,8 @@ import 'package:perfect_hr_mobile/core/capabilities/capabilities_repository.dart
 import 'package:perfect_hr_mobile/core/capabilities/capability_providers.dart';
 import 'package:perfect_hr_mobile/core/capabilities/model_access.dart';
 import 'package:perfect_hr_mobile/core/config/app_config.dart';
+import 'package:perfect_hr_mobile/core/tenant/tenant_config.dart';
+import 'package:perfect_hr_mobile/core/tenant/tenant_providers.dart';
 import 'package:perfect_hr_mobile/core/data/data_providers.dart';
 import 'package:perfect_hr_mobile/core/session/permissions.dart';
 import 'package:perfect_hr_mobile/core/session/session_controller.dart';
@@ -17,6 +19,7 @@ import 'package:perfect_hr_mobile/features/authentication/application/auth_provi
 import 'package:perfect_hr_mobile/features/authentication/data/auth_repository.dart';
 import 'package:perfect_hr_mobile/features/authentication/data/secure_token_store.dart';
 import 'package:perfect_hr_mobile/features/authentication/domain/auth_session.dart';
+import 'package:perfect_hr_mobile/features/authentication/domain/sign_in_outcome.dart';
 import 'package:perfect_hr_mobile/features/settings/presentation/more_screen.dart';
 
 /// SET-01 More.
@@ -31,10 +34,47 @@ class _StubAuthRepository implements AuthRepository {
   Object? signOutError;
 
   @override
-  Future<AuthSession> signIn({
+  Future<SignInOutcome> signIn({
     required String login,
     required String password,
     String? deviceLabel,
+    String? companyId,
+    String? authMode,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AuthSession> completeSignIn({
+    required String mfaToken,
+    required Map<String, dynamic> assertion,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AuthSession> completeSignInWithDevice({
+    required String mfaToken,
+    required Map<String, dynamic> signaturePayload,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AuthSession> switchCompany({
+    required String accessToken,
+    required String companyId,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<DevicePairing> pairDevice({
+    required String login,
+    required String code,
+    required String publicKey,
+    required String deviceLabel,
+    required String platform,
   }) async {
     throw UnimplementedError();
   }
@@ -224,15 +264,23 @@ void main() {
   });
 
   group('about', () {
-    testWidgets('names the server the app is talking to', (tester) async {
+    testWidgets('names the workspace the app is talking to', (tester) async {
       final container = _container(_StubAuthRepository());
       addTearDown(container.dispose);
+      container.read(tenantControllerProvider.notifier).adopt(
+            const TenantConfig(
+              baseUrl: 'https://acme.perfecthr.net',
+              tenantId: 'acme.perfecthr.net',
+              tenantName: 'Acme Ltd',
+            ),
+          );
       await _pump(tester, container);
 
-      expect(
-        find.text(Uri.parse(AppConfig.current.apiBaseUrl).host),
-        findsOneWidget,
-      );
+      // Both, because either alone is ambiguous on a multi-tenant product:
+      // the name is what a person recognises, the host is what they would
+      // read out to support.
+      expect(find.text('Acme Ltd'), findsWidgets);
+      expect(find.text('acme.perfecthr.net'), findsOneWidget);
     });
 
     testWidgets('says plainly when the data is not live', (tester) async {

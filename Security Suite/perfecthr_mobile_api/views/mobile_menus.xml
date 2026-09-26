@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Self-service pairing, reachable by every employee.
+
+        THE PROBLEM THIS SOLVES
+
+        sec_webauthn_auth puts "Pair a Device" under
+        Security Suite > Authenticators, and the Security Suite root menu is
+        gated on sec_plaza_rbac.group_plaza_viewer. Ordinary staff do not have
+        that group, and Odoo hides a child menu whose parent chain is invisible.
+
+        So the sequence was:
+
+            employee installs the app
+            app says "pair this device in your browser"
+            employee signs in to the browser
+            the menu is not there
+            employee cannot pair, cannot use advanced sign-in, files a ticket
+
+        The wizard itself was never the problem. sec.device.pair.wizard is
+        already base.group_user in that module's ACLs, and issue_for sudoes its
+        own writes. Only the route to it was blocked, which is the worst kind of
+        gap: everything is configured correctly and the feature is simply
+        unreachable.
+
+        Granting group_plaza_viewer to all staff would have fixed the symptom
+        and published the role catalog and access matrix to everybody, so the
+        menu moves instead of the group.
+
+        WHY A ROOT MENU
+
+        A root menuitem is the correct placement on this deployment.
+        hrms_dashboard/menu_service_patch.js filters getApps() down to Perfect
+        Hr, but ir.ui.menu.get_zoho_apps() still returns every other root menu,
+        so this appears in the app grid as expected.
+
+        Named for what the employee is trying to do, not for the machinery:
+        somebody looking for this is holding a phone, not thinking about
+        WebAuthn credentials.
+
+        No web_icon: this module ships no static/description/icon.png, and
+        naming one that does not exist gets a broken image in the app grid
+        rather than Odoo's own default.
+    -->
+    <menuitem id="menu_mobile_root"
+              name="Mobile App"
+              sequence="16"
+              groups="base.group_user"/>
+
+    <menuitem id="menu_mobile_pair_phone"
+              name="Pair My Phone"
+              parent="menu_mobile_root"
+              action="sec_webauthn_auth.action_device_pair_wizard"
+              sequence="10"
+              groups="base.group_user"/>
+
+    <!--
+        The same list the Security Suite shows, but filtered to the reader's own
+        credentials, so an employee can see which handsets are paired to them
+        and have one removed.
+    -->
+    <record id="action_my_devices" model="ir.actions.act_window">
+        <field name="name">My Paired Devices</field>
+        <field name="res_model">sec.webauthn.credential</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="context">{'create': False}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No phone is paired to your account yet.
+            </p>
+            <p>
+                Open Perfect HR on your phone, choose <b>Pair this device</b>,
+                then use <b>Pair My Phone</b> here to get a code.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_mobile_my_devices"
+              name="My Paired Devices"
+              parent="menu_mobile_root"
+              action="action_my_devices"
+              sequence="20"
+              groups="base.group_user"/>
+</odoo>

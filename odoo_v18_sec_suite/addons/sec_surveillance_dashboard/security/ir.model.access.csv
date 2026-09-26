@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_business_hours_compliance,sec.business.hours compliance,model_sec_business_hours,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_value_threshold_viewer,sec.value.threshold viewer,model_sec_value_threshold,sec_plaza_rbac.group_plaza_viewer,1,0,0,0
-access_value_threshold_compliance,sec.value.threshold compliance,model_sec_value_threshold,sec_plaza_rbac.group_plaza_compliance,1,1,1,0
-access_anomaly_review_wizard,anomaly.review.wizard,model_anomaly_review_wizard,sec_plaza_rbac.group_plaza_compliance,1,1,1,1

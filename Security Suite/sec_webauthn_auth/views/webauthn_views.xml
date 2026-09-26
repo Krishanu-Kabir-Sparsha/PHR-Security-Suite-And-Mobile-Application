@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_webauthn_credential_list" model="ir.ui.view">
+        <field name="name">sec.webauthn.credential.list</field>
+        <field name="model">sec.webauthn.credential</field>
+        <field name="arch" type="xml">
+            <list string="Enrolled Authenticators" create="false"
+                  decoration-muted="not active">
+                <field name="user_id"/>
+                <field name="device_label"/>
+                <field name="authenticator_type"/>
+                <field name="enrolled_at"/>
+                <field name="last_used_at"/>
+                <field name="sign_counter" optional="hide"/>
+                <field name="rp_id" optional="hide"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_webauthn_credential_form" model="ir.ui.view">
+        <field name="name">sec.webauthn.credential.form</field>
+        <field name="model">sec.webauthn.credential</field>
+        <field name="arch" type="xml">
+            <form string="Authenticator" create="false">
+                <header>
+                    <button name="action_revoke" type="object" string="Revoke"
+                            class="btn-danger" invisible="not active"
+                            confirm="Revoking is immediate and cannot be undone. Re-enrolling a device requires independent multi-party approval. Continue?"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Revoked"
+                            bg_color="text-bg-danger" invisible="active"/>
+                    <group>
+                        <group>
+                            <field name="user_id" readonly="1"/>
+                            <field name="device_label"/>
+                            <field name="authenticator_type"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="enrolled_at"/>
+                            <field name="last_used_at"/>
+                            <field name="sign_counter"/>
+                            <field name="rp_id"/>
+                        </group>
+                    </group>
+                    <group string="Credential">
+                        <field name="credential_id"/>
+                        <field name="aaguid"/>
+                        <field name="transports"/>
+                        <field name="revoked_reason"/>
+                    </group>
+                    <div class="alert alert-info" role="alert">
+                        Only the public key is stored. The private key and any
+                        biometric data remain on the device and never transit
+                        the network.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_webauthn_credential" model="ir.actions.act_window">
+        <field name="name">Enrolled Authenticators</field>
+        <field name="res_model">sec.webauthn.credential</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <record id="action_webauthn_enroll_url" model="ir.actions.act_url">
+        <field name="name">Enrol My Device</field>
+        <field name="url">/webauthn/enroll</field>
+        <field name="target">self</field>
+    </record>
+
+    <menuitem id="menu_webauthn"
+              name="Authenticators"
+              parent="sec_plaza_rbac.menu_security_suite_root"
+              sequence="18"/>
+
+    <menuitem id="menu_webauthn_enroll"
+              name="Enrol My Device"
+              parent="menu_webauthn"
+              action="action_webauthn_enroll_url"
+              sequence="10"/>
+
+    <menuitem id="menu_webauthn_credentials"
+              name="All Authenticators"
+              parent="menu_webauthn"
+              action="action_webauthn_credential"
+              sequence="20"
+              groups="sec_plaza_rbac.group_plaza_compliance"/>
+
+
+    <!--
+        Clear a user's enrolment history so they can start again.
+
+        Revoking a credential archives it, which is right: a revocation is
+        evidence. But the enrolment gate reads history rather than active
+        credentials, so a user whose devices have all been revoked is sent to
+        break-glass recovery instead of a fresh first enrolment. That is correct
+        for a key lost in the field and wrong for a replaced handset or a test
+        account, and this is the deliberate way out.
+
+        Destructive and administrator-only; the method refuses anyone else and
+        writes the audit record before deleting anything.
+    -->
+    <record id="action_reset_webauthn_enrolment" model="ir.actions.server">
+        <field name="name">Reset enrolment (start fresh)</field>
+        <field name="model_id" ref="model_sec_webauthn_credential"/>
+        <field name="binding_model_id" ref="model_sec_webauthn_credential"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="state">code</field>
+        <field name="code">action = records.action_reset_enrolment()</field>
+        <!--
+            The same group as the Reset Enrolment menu. Safe to name despite
+            this module declaring only sec_core: sec_core depends on
+            sec_plaza_rbac, so the group is always loaded by the time this runs.
+        -->
+        <field name="groups_id" eval="[(6, 0, [
+            ref('sec_plaza_rbac.group_security_super_admin'),
+        ])]"/>
+    </record>
+
+</odoo>

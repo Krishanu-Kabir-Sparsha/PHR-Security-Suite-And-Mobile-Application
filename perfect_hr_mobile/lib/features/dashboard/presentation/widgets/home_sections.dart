@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_dimensions.dart';
 import '../../../../shared/extensions/theme_context.dart';
@@ -17,6 +18,7 @@ class TodayAttendanceCard extends StatelessWidget {
     this.onCheckIn,
     this.onCheckOut,
     this.onBreak,
+    this.onResolveStale,
     this.isBusy = false,
     super.key,
   });
@@ -25,6 +27,10 @@ class TodayAttendanceCard extends StatelessWidget {
   final VoidCallback? onCheckIn;
   final VoidCallback? onCheckOut;
   final VoidCallback? onBreak;
+
+  /// Close a session left open on an earlier day. Null hides the affordance,
+  /// which is what the mock and the widget tests want.
+  final VoidCallback? onResolveStale;
 
   /// Disables actions while a check-in or check-out is in flight, so a double
   /// tap cannot submit twice.
@@ -81,6 +87,47 @@ class TodayAttendanceCard extends StatelessWidget {
               ],
             ),
           ],
+          // A session left open on an earlier day. Explained here, before the
+          // person taps anything, because until it is closed Odoo's overlap
+          // constraint refuses every new check-in -- and the refusal used to
+          // arrive as a raw database error naming a date with no context.
+          if (attendance.state.needsAttention) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: palette.warningContainer,
+                borderRadius: AppRadius.controlRadius,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    attendance.openSince == null
+                        ? 'You are still checked in from an earlier day.'
+                        : 'You are still checked in from '
+                            '${_formatDay(attendance.openSince!)}.',
+                    style: context.text.bodyMedium
+                        ?.copyWith(color: palette.onWarningContainer),
+                  ),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    'It will be closed at the end of that working day, not '
+                    'now, so the hours stay right.',
+                    style: context.text.bodySmall
+                        ?.copyWith(color: palette.onWarningContainer),
+                  ),
+                  if (onResolveStale != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    FilledButton(
+                      onPressed: isBusy ? null : onResolveStale,
+                      child: const Text('Close that session'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           if (_hasActions) ...[
             const SizedBox(height: AppSpacing.md),
             Row(
@@ -123,6 +170,11 @@ class TodayAttendanceCard extends StatelessWidget {
   bool get _hasActions =>
       attendance.state.canCheckIn || attendance.state.canCheckOut;
 
+  /// "Thursday 24 September" — names the day rather than printing a date, so
+  /// the reader does not have to work out which day that was.
+  static String _formatDay(DateTime when) =>
+      DateFormat('EEEE d MMMM').format(when);
+
   static (String, AppStatus) _statusFor(AttendanceState state) {
     return switch (state) {
       AttendanceState.checkedIn => ('CHECKED IN', AppStatus.success),
@@ -132,6 +184,10 @@ class TodayAttendanceCard extends StatelessWidget {
       AttendanceState.holiday => ('HOLIDAY', AppStatus.info),
       AttendanceState.absent => ('ABSENT', AppStatus.danger),
       AttendanceState.notCheckedIn => ('NOT CHECKED IN', AppStatus.neutral),
+      // Warning, not success. They are technically checked in, but from a
+      // previous day and nothing else can happen until it is closed.
+      AttendanceState.checkedInStale =>
+        ('STILL CHECKED IN', AppStatus.warning),
     };
   }
 

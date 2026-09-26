@@ -7,6 +7,7 @@ import '../../../core/constants/screen_ids.dart';
 import '../../../core/data/cache_policy.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/session/session_controller.dart';
+import '../../authentication/application/auth_providers.dart';
 import '../../../core/theme/app_dimensions.dart';
 import '../../../shared/ai/ai_cards.dart';
 import '../../../shared/ai/ai_provenance.dart';
@@ -18,6 +19,7 @@ import '../../../shared/widgets/app_card.dart';
 import '../application/employee_home_providers.dart';
 import '../domain/employee_home_summary.dart';
 import 'widgets/home_sections.dart';
+import '../../attendance/application/attendance_providers.dart';
 
 /// **E-01 — Employee Home.**
 ///
@@ -149,6 +151,9 @@ class _HomeContent extends ConsumerWidget {
           const SizedBox(height: AppSpacing.md),
         ],
 
+        // What signing in did to attendance, said once.
+        const _SignInAttendanceNotice(),
+
         // Section 1 — TODAY
         const AppSectionHeader(title: 'Today'),
         TodayAttendanceCard(
@@ -156,6 +161,10 @@ class _HomeContent extends ConsumerWidget {
           onCheckIn: () => _openAttendance(context),
           onCheckOut: () => _openAttendance(context),
           onBreak: () => _openAttendance(context),
+          // Handled here rather than by sending them to the Attendance tab.
+          // A forgotten session blocks every check-in, so the fix has to be
+          // reachable from the screen that first tells them about it.
+          onResolveStale: () => _resolveStale(context, ref),
         ),
         const SizedBox(height: AppSpacing.lg),
 
@@ -262,6 +271,96 @@ class _HomeContent extends ConsumerWidget {
         // closest honest destination.
         context.go(AppRoutes.requests);
     }
+  }
+}
+
+/// Confirms what signing in did to today's attendance, once.
+///
+/// Shown for a check-in that was actually recorded, and for the outcomes a
+/// person would otherwise be left wondering about — being on approved leave,
+/// having no employee record, or the write having failed. Deliberately silent
+/// for "already checked in" and for a company that has the feature off: those
+/// need no explanation and a banner for them is noise that teaches people to
+/// ignore this one.
+///
+/// Dismissed by tapping, and cleared on sign-out. It is never persisted, so it
+/// cannot reappear tomorrow claiming somebody has just been checked in.
+/// Close a session left open on an earlier day, and say what happened.
+Future<void> _resolveStale(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final ok = await ref
+      .read(attendanceToggleProvider.notifier)
+      .resolveStale();
+  if (!context.mounted) return;
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        ok
+            ? 'That session has been closed. You can check in now.'
+            : 'That session could not be closed. Please ask HR to correct it.',
+      ),
+    ),
+  );
+}
+
+class _SignInAttendanceNotice extends ConsumerWidget {
+  const _SignInAttendanceNotice();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final attendance = ref.watch(lastSignInAttendanceProvider);
+    if (attendance == null) return const SizedBox.shrink();
+
+    final message = attendance.message ?? attendance.describe;
+    if (message.isEmpty) return const SizedBox.shrink();
+    if (!attendance.wasRecorded && !attendance.isWorthExplaining) {
+      return const SizedBox.shrink();
+    }
+
+    final palette = context.palette;
+    final good = attendance.wasRecorded;
+    final at = attendance.checkInAt;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Material(
+        color: good ? palette.successContainer : palette.infoContainer,
+        borderRadius: AppRadius.cardRadius,
+        child: InkWell(
+          borderRadius: AppRadius.cardRadius,
+          onTap: () =>
+              ref.read(lastSignInAttendanceProvider.notifier).state = null,
+          child: Padding(
+            padding: AppSpacing.card,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  good ? Icons.how_to_reg_outlined : Icons.info_outline,
+                  color: good
+                      ? palette.onSuccessContainer
+                      : palette.onInfoContainer,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    at != null && good
+                        ? '$message Checked in at '
+                            '${TimeOfDay.fromDateTime(at.toLocal()).format(context)}.'
+                        : message,
+                    style: context.text.bodyMedium?.copyWith(
+                      color: good
+                          ? palette.onSuccessContainer
+                          : palette.onInfoContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

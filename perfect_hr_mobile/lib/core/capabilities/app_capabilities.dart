@@ -87,6 +87,8 @@ class AppCapabilities {
     this.divergence = const [],
     this.previewingRole,
     this.assignableRoles = const [],
+    this.expectedPackage,
+    this.expectedFingerprint,
   });
 
   final Set<AppFeature> features;
@@ -126,6 +128,18 @@ class AppCapabilities {
   final List<AssignableRole> assignableRoles;
 
   bool get isPreviewing => previewingRole != null;
+
+  /// The app identity this server will accept for passkeys.
+  ///
+  /// Reported so the app can hold it against its own signing certificate.
+  /// Android's refusal when they disagree is "RP ID cannot be validated",
+  /// which names neither value — so without this, telling a stale build apart
+  /// from a wrong parameter is guesswork.
+  ///
+  /// Neither is a secret: both are already published at
+  /// `/.well-known/assetlinks.json`.
+  final String? expectedPackage;
+  final String? expectedFingerprint;
 
   /// Whether an `hr.employee` record is linked to this login.
   ///
@@ -200,6 +214,10 @@ class AppCapabilities {
     final rawRoles = json['roles'];
     final rawDivergence = json['divergence'];
     final rawPreview = json['previewing_role'];
+    final rawExpected = json['expected_app'];
+    final expected = rawExpected is Map
+        ? rawExpected.cast<String, Object?>()
+        : const <String, Object?>{};
     final rawAssignable = json['assignable_roles'];
 
     final permissions = <String, ModelAccess>{};
@@ -221,6 +239,8 @@ class AppCapabilities {
               .map((r) => PlazaRole.fromJson(r.cast<String, Object?>()))
               .toList()
           : const [],
+      expectedPackage: (expected['package'] as String?)?.trim(),
+      expectedFingerprint: (expected['sha256'] as String?)?.trim(),
       previewingRole: rawPreview is Map
           ? AssignableRole.fromJson(rawPreview.cast<String, Object?>())
           : null,

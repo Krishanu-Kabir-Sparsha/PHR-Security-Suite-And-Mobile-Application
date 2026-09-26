@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:perfect_hr_mobile/core/config/app_config.dart';
+import 'package:perfect_hr_mobile/core/tenant/tenant_config.dart';
+import 'package:perfect_hr_mobile/core/tenant/tenant_providers.dart';
 import 'package:perfect_hr_mobile/core/networking/api_client.dart';
 import 'package:perfect_hr_mobile/core/networking/auth_interceptor.dart';
 import 'package:perfect_hr_mobile/core/networking/connectivity_service.dart';
@@ -91,13 +93,42 @@ void main() {
       );
     });
 
-    test('both clients target the configured API base URL', () {
+    test('both clients target the resolved workspace', () {
       final container = _containerAsMainDoes();
       addTearDown(container.dispose);
 
-      final expected = AppConfig.current.apiBaseUrl;
+      // The workspace is chosen at run time, so the assertion is that both
+      // clients agree with whatever it currently is -- not that it matches a
+      // constant. A build where the two disagreed would send authenticated
+      // calls to one server and sign-in calls to another.
+      final expected = container.read(apiBaseUrlProvider);
       expect(container.read(authDioProvider).options.baseUrl, expected);
       expect(container.read(dioProvider).options.baseUrl, expected);
+    });
+
+    test('choosing a workspace repoints both clients', () {
+      // The regression this guards: the Dio providers used to read a
+      // compiled-in URL at construction, so pointing the app at a different
+      // customer changed nothing and every call kept going to the old server
+      // -- with the new customer's token attached.
+      final container = _containerAsMainDoes();
+      addTearDown(container.dispose);
+
+      const workspace = TenantConfig(
+        baseUrl: 'https://acme.perfecthr.net',
+        tenantId: 'acme.perfecthr.net',
+        tenantName: 'Acme Ltd',
+      );
+      container.read(tenantControllerProvider.notifier).adopt(workspace);
+
+      expect(
+        container.read(dioProvider).options.baseUrl,
+        'https://acme.perfecthr.net/api/mobile/v1',
+      );
+      expect(
+        container.read(authDioProvider).options.baseUrl,
+        'https://acme.perfecthr.net/api/mobile/v1',
+      );
     });
 
     test('the whole graph builds in one pass, as at launch', () {
@@ -116,11 +147,41 @@ void main() {
   });
 
   group('configuration', () {
-    test('the dev flavour points at a real host, not a placeholder', () {
+    test('the dev flavour seeds a real host, not a placeholder', () {
       // `.example` is reserved by RFC 2606 and can never resolve. If it comes
-      // back, the API base URL was reverted and the app is silently on mocks.
-      expect(AppConfig.current.apiBaseUrl, isNot(contains('.example')));
-      expect(AppConfig.current.apiBaseUrl, startsWith('https://'));
+      // back, the seed was reverted and the app is silently on mocks.
+      final seed = AppConfig.current.seedWorkspaceUrl;
+      expect(seed, isNotNull);
+      expect(seed, isNot(contains('.example')));
+      expect(seed, startsWith('https://'));
+    });
+
+    test('a bare company name resolves to a workspace address', () {
+      // What somebody reads off an induction email. Rejecting it would make
+      // the very first screen of the app the hardest one.
+      expect(
+        normaliseWorkspaceUrl('acme'),
+        'https://acme.perfecthr.net',
+      );
+    });
+
+    test('a pasted page URL is reduced to its origin', () {
+      expect(
+        normaliseWorkspaceUrl('https://acme.perfecthr.net/web/login?db=x'),
+        'https://acme.perfecthr.net',
+      );
+    });
+
+    test('an explicit http address is refused for a real host', () {
+      // Honouring it quietly would put a password on the wire in clear.
+      expect(
+        () => normaliseWorkspaceUrl('http://acme.perfecthr.net'),
+        throwsA(isA<WorkspaceAddressError>()),
+      );
+    });
+
+    test('loopback is allowed over http, for a developer', () {
+      expect(normaliseWorkspaceUrl('localhost:8069'), 'http://localhost:8069');
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_config.dart';
+import '../tenant/tenant_providers.dart';
 import '../session/session_controller.dart';
 import '../session/session_state.dart';
 import '../storage/app_database.dart';
@@ -17,23 +18,25 @@ import 'cache_store.dart';
 enum DataSourceMode { live, mock }
 
 class DataSourceModeController extends Notifier<DataSourceMode> {
-  /// A base URL still pointing at the placeholder domain means no backend has
-  /// been configured yet. `.example` is reserved by RFC 2606 and can never
-  /// resolve, so this is a reliable signal rather than a guess.
-  static bool get _backendUnconfigured =>
-      AppConfig.current.apiBaseUrl.contains('.example');
+  /// No workspace has been chosen, so there is no server to be live against.
+  ///
+  /// This used to test the base URL for the reserved `.example` domain, which
+  /// was a reliable signal while every flavour carried a compiled-in host.
+  /// Hosts are now chosen at run time, so the honest question is simply
+  /// whether one has been chosen yet -- and an empty base URL is exactly that.
+  bool get _backendUnconfigured => ref.watch(apiBaseUrlProvider).isEmpty;
 
   @override
   DataSourceMode build() {
     // Live by default: a feature must opt into mocks explicitly, so nobody
     // demos mock data believing it came from the backend.
     //
-    // The one exception is a dev/qa build whose API host is still the
-    // placeholder. There, "live" cannot mean anything except a network error on
-    // every screen, which teaches nothing about the app. Falling back to mocks
-    // is deliberately conditional on the URL, not on the flavour, so it
-    // corrects itself the moment a real host is configured — there is no flag
-    // to remember to turn off before a demo.
+    // The one exception is a dev/qa build with no workspace chosen yet.
+    // There, "live" cannot mean anything except a network error on every
+    // screen, which teaches nothing about the app. Falling back to mocks is
+    // deliberately conditional on the workspace, not on the flavour, so it
+    // corrects itself the moment one is chosen — there is no flag to
+    // remember to turn off before a demo.
     if (AppConfig.current.allowsDevTools && _backendUnconfigured) {
       return DataSourceMode.mock;
     }

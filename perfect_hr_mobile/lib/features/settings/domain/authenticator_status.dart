@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utilities/server_time.dart';
 
 /// One enrolled security key or passkey.
 @immutable
@@ -8,11 +9,26 @@ class EnrolledAuthenticator {
     required this.label,
     this.enrolledAt,
     this.backedUp = false,
+    this.mechanism = 'webauthn',
   });
 
   final String id;
   final String label;
   final DateTime? enrolledAt;
+
+  /// `webauthn` for a passkey, `bound_device` for a paired app.
+  ///
+  /// Shown because the two are not interchangeable from where the user is
+  /// standing. A passkey can be used by a browser on any machine it has synced
+  /// to; a paired app's key exists on exactly one handset and can be used only
+  /// by this app. A list that rendered both as "security key" left someone
+  /// unable to tell which of their three entries was the phone in their hand.
+  final String mechanism;
+
+  bool get isPairedApp => mechanism == 'bound_device';
+
+  /// What to call it on screen.
+  String get kindLabel => isPairedApp ? 'Paired app' : 'Passkey';
 
   /// The authenticator reports itself synced to a cloud keychain.
   ///
@@ -27,12 +43,13 @@ class EnrolledAuthenticator {
       label: json['label'] as String? ?? 'Security key',
       enrolledAt: _parseDate(json['enrolled_at']),
       backedUp: json['backed_up'] as bool? ?? false,
+      mechanism: json['mechanism'] as String? ?? 'webauthn',
     );
   }
 
   static DateTime? _parseDate(Object? value) {
     if (value is! String || value.isEmpty) return null;
-    return DateTime.tryParse(value.replaceFirst(' ', 'T'));
+    return parseServerTime(value);
   }
 }
 
@@ -48,6 +65,7 @@ class AuthenticatorStatus {
     this.relyingParty,
     this.enrolUrl,
     this.requiresWebSession = true,
+    this.pairedDevices = 0,
   });
 
   final int enrolled;
@@ -71,6 +89,9 @@ class AuthenticatorStatus {
   /// a sign-in even though the app already holds a token.
   final bool requiresWebSession;
 
+  /// How many paired apps this account has, from the server's own count.
+  final int pairedDevices;
+
   bool get canEnrol => configured && (enrolUrl ?? '').isNotEmpty;
 
   /// How many more devices are needed, never negative.
@@ -85,6 +106,7 @@ class AuthenticatorStatus {
       relyingParty: json['relying_party'] as String?,
       enrolUrl: json['enrol_url'] as String?,
       requiresWebSession: json['requires_web_session'] as bool? ?? true,
+      pairedDevices: (json['paired_devices'] as num?)?.toInt() ?? 0,
       devices: ((json['devices'] as List?) ?? const [])
           .whereType<Map>()
           .map((e) => EnrolledAuthenticator.fromJson(e.cast<String, Object?>()))

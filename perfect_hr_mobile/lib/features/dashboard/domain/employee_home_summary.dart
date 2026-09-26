@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utilities/server_time.dart';
 
 /// Attendance state for today.
 ///
@@ -6,6 +7,17 @@ import 'package:flutter/foundation.dart';
 enum AttendanceState {
   notCheckedIn('not_checked_in'),
   checkedIn('checked_in'),
+
+  /// An attendance row left open on an earlier day: they forgot to check out.
+  ///
+  /// Reported as its own state rather than folded into [checkedIn] because the
+  /// remedy is different and because, until it is closed, Odoo's own overlap
+  /// constraint refuses *every* new check-in. It used to surface as a raw
+  /// database error after the user pressed a button that could never work
+  /// ("the employee hasn't checked out since 09/24/2026 18:07:27"); now the
+  /// app can say so first and offer to fix it.
+  checkedInStale('checked_in_stale'),
+
   onBreak('on_break'),
   checkedOut('checked_out'),
   onLeave('on_leave'),
@@ -19,11 +31,21 @@ enum AttendanceState {
   static AttendanceState fromWire(String? value) => AttendanceState.values
       .firstWhere((s) => s.wireValue == value, orElse: () => notCheckedIn);
 
-  bool get canCheckIn => this == notCheckedIn;
+  /// Checking out for lunch and back in again is one day, two sessions.
+  ///
+  /// This used to be `notCheckedIn` alone, which meant the Home card offered
+  /// no buttons at all once somebody had checked out — `hasActions` is
+  /// `canCheckIn || canCheckOut` and both were false. The Attendance tab keyed
+  /// on `isWorking` instead and kept offering Check In, so the same account
+  /// could act on one screen and not the other.
+  bool get canCheckIn => this == notCheckedIn || this == checkedOut;
 
   bool get canCheckOut => this == checkedIn || this == onBreak;
 
   bool get isWorking => this == checkedIn || this == onBreak;
+
+  /// Nothing normal can happen until the forgotten session is closed.
+  bool get needsAttention => this == checkedInStale;
 }
 
 /// Today's attendance, as shown in the E-01 TODAY card.
@@ -37,12 +59,18 @@ class TodayAttendance {
     this.workedMinutes = 0,
     this.shiftLabel,
     this.workplaceLabel,
+    this.openSince,
   });
 
   final AttendanceState state;
   final DateTime? checkInAt;
   final DateTime? breakStartedAt;
   final DateTime? checkOutAt;
+
+  /// When the still-open session began. Set whenever a row is open, and the
+  /// thing a stale-session message has to name — "still checked in from
+  /// Thursday" is actionable, "still checked in" is not.
+  final DateTime? openSince;
 
   /// Minutes worked so far today, computed server-side.
   ///
@@ -74,17 +102,23 @@ class TodayAttendance {
       workedMinutes: (json['worked_minutes'] as num?)?.toInt() ?? 0,
       shiftLabel: json['shift_label'] as String?,
       workplaceLabel: json['workplace_label'] as String?,
+      openSince: _parseTime(json['open_since']),
     );
   }
 
   Map<String, Object?> toJson() => {
         'state': state.wireValue,
-        'check_in_at': checkInAt?.toIso8601String(),
-        'break_started_at': breakStartedAt?.toIso8601String(),
-        'check_out_at': checkOutAt?.toIso8601String(),
+        // UTC with a Z; see serialiseInstant. A local ISO string would be
+        // re-read as UTC and shift on every cache round trip.
+        'check_in_at': serialiseInstant(checkInAt),
+        'break_started_at': serialiseInstant(breakStartedAt),
+        'check_out_at': serialiseInstant(checkOutAt),
         'worked_minutes': workedMinutes,
         'shift_label': shiftLabel,
         'workplace_label': workplaceLabel,
+        // Round-trips through the cache, so a stale session is still named
+        // correctly when the app opens offline.
+        'open_since': serialiseInstant(openSince),
       };
 }
 
@@ -314,5 +348,5 @@ class EmployeeHomeSummary {
 
 DateTime? _parseTime(Object? value) {
   if (value is! String || value.isEmpty) return null;
-  return DateTime.tryParse(value)?.toLocal();
+  return parseServerTime(value);
 }

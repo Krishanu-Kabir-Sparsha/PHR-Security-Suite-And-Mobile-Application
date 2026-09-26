@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/capabilities/app_capabilities.dart';
+import '../../approvals/application/approvals_providers.dart';
 import '../../../core/capabilities/capability_providers.dart';
 import '../../../core/capabilities/model_access.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/tenant/tenant_providers.dart';
 import '../../../core/constants/screen_ids.dart';
 import '../../../core/data/data_providers.dart';
+import '../../../core/errors/app_failure.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/session/session_controller.dart';
 import '../../../core/session/session_state.dart';
@@ -53,6 +56,22 @@ class MoreScreen extends ConsumerWidget {
         ),
         children: [
           if (user != null) _ProfileCard(user: user),
+
+          // Position and standing, directly under the name. Who somebody is,
+          // before what they may do. Null when HR has not filled the record
+          // in, and then nothing is drawn -- a card of dashes reads as broken.
+          if (user != null &&
+              _ProfileCard.employmentCard(context, user) != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _ProfileCard.employmentCard(context, user)!,
+          ],
+
+          // Only where there is somewhere to switch to.
+          if (user != null && user.canSwitchCompany) ...[
+            const SizedBox(height: AppSpacing.lg),
+            const _SectionHeader('Company'),
+            _CompanySwitcher(user: user),
+          ],
           const SizedBox(height: AppSpacing.lg),
 
           const _SectionHeader('Your roles'),
@@ -61,6 +80,11 @@ class MoreScreen extends ConsumerWidget {
 
           const _RolePreviewSection(),
           const _DivergenceSection(),
+
+          // Shown only where the override workflow exists and something is
+          // waiting. Most staff approve nothing, and a permanent entry that is
+          // always empty is one people stop reading.
+          const _ApprovalsTile(),
 
           // Leave has no bottom-nav tab of its own — it lives under Requests,
           // which is still a placeholder — so without an entry here the only
@@ -105,7 +129,6 @@ class MoreScreen extends ConsumerWidget {
       ),
     );
   }
-
   /// Sign-out is confirmed because it is not cheap to undo here: it revokes the
   /// token server-side and purges the local cache, so an accidental tap costs a
   /// full re-authentication and a cold re-sync on a slow connection.
@@ -138,16 +161,16 @@ class MoreScreen extends ConsumerWidget {
     // cached data from the device. The router then redirects to Welcome on its
     // own, because the session state it keys on has changed.
     await ref.read(signInControllerProvider.notifier).signOut();
-  }
-}
-
-class _ProfileCard extends StatelessWidget {
+  }}
+/// A ConsumerWidget because the avatar path is server-relative and has to be
+/// resolved against whichever workspace this app is pointed at.
+class _ProfileCard extends ConsumerWidget {
   const _ProfileCard({required this.user});
 
   final SessionUser user;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
 
     return AppCard(
@@ -158,7 +181,7 @@ class _ProfileCard extends StatelessWidget {
             backgroundColor: palette.brandContainer,
             foregroundImage: user.avatarUrl == null
                 ? null
-                : NetworkImage(_absolute(user.avatarUrl!)),
+                : NetworkImage(_absolute(ref, user.avatarUrl!)),
             child: Icon(
               Icons.person_outline,
               color: palette.onBrandContainer,
@@ -184,7 +207,11 @@ class _ProfileCard extends StatelessWidget {
                   ),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
-                  '${user.tenantName} · ${user.role.experienceLabel}',
+                  // The company, not the workspace. On a multi-company tenant
+                  // these differ, and the company is what determines whose
+                  // data is on screen -- so it is the one worth the line.
+                  '${user.companyName.isEmpty ? user.tenantName : user.companyName}'
+                  ' · ${user.role.experienceLabel}',
                   style: context.text.bodySmall
                       ?.copyWith(color: palette.inkTertiary),
                   maxLines: 1,
@@ -197,15 +224,154 @@ class _ProfileCard extends StatelessWidget {
       ),
     );
   }
+  /// Position and standing, below the name.
+  ///
+  /// The other half of "who am I" -- the app already showed the role, which is
+  /// what somebody may *do*; this is what they *are*. Two different questions,
+  /// and a role list on its own reads as jargon until it sits next to a job
+  /// title and a department.
+  ///
+  /// Renders nothing when HR has not filled the record in. An empty card with
+  /// four dashes in it says "broken"; no card says "nothing to show yet".
+  static Widget? employmentCard(BuildContext context, SessionUser user) {
+    final employment = user.employment;
+    if (employment == null || employment.isEmpty) return null;
+
+    final rows = <(String, String)>[
+      if (employment.employeeCode != null)
+        ('Employee ID', employment.employeeCode!),
+      if (employment.jobPosition != null)
+        ('Position', employment.jobPosition!),
+      if (employment.department != null)
+        ('Department', employment.department!),
+      if (employment.manager != null) ('Reports to', employment.manager!),
+      if (employment.workLocation != null)
+        ('Work location', employment.workLocation!),
+      if (employment.shift != null) ('Shift', employment.shift!),
+      if (employment.status != null) ('Status', _statusLabel(employment.status!)),
+    ];
+    if (rows.isEmpty) return null;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (label, value) in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: Text(
+                      label,
+                      style: context.text.bodySmall
+                          ?.copyWith(color: context.palette.inkSecondary),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(value, style: context.text.bodyMedium),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Odoo's contract states are internal words. These are the ones people use.
+  static String _statusLabel(String state) => switch (state) {
+        'draft' => 'Awaiting contract',
+        'open' => 'Active',
+        'close' => 'Ended',
+        'cancel' => 'Cancelled',
+        _ => state,
+      };
 
   /// The API returns the avatar as a server-relative path (`/web/image/...`),
-  /// which `NetworkImage` cannot resolve on its own. The API base URL carries
-  /// the `/api/mobile/v1` suffix, so the origin has to be taken from it rather
-  /// than the whole string being used as a prefix.
-  static String _absolute(String path) {
+  /// which `NetworkImage` cannot resolve on its own.
+  ///
+  /// Resolved against the workspace's origin, which TenantConfig.baseUrl
+  /// already is -- it deliberately carries no `/api/mobile/v1` suffix, so the
+  /// old dance of parsing that off is gone. Returns the path unchanged when no
+  /// workspace is set, which cannot render but also cannot point somewhere
+  /// wrong.
+  static String _absolute(WidgetRef ref, String path) {
     if (path.startsWith('http')) return path;
-    final base = Uri.parse(AppConfig.current.apiBaseUrl);
-    return base.replace(path: path, query: null).toString();
+    final tenant = ref.read(tenantControllerProvider);
+    return tenant?.absolute(path) ?? path;
+  }}
+/// Move this session to another of the user's companies.
+///
+/// Drawn only when there is more than one, so most people never see it. The
+/// switch mints a fresh session server-side rather than editing the current
+/// one: the company is pinned on the token precisely so it cannot change
+/// underneath a request already in flight.
+class _CompanySwitcher extends ConsumerWidget {
+  const _CompanySwitcher({required this.user});
+
+  final SessionUser user;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(signInControllerProvider).isLoading;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final company in user.companies)
+            RadioListTile<String>(
+              value: company.id,
+              groupValue: user.companyId,
+              // Disabled while a switch is in flight, so a second tap cannot
+              // start one before the first has replaced the session.
+              onChanged: busy || company.id == user.companyId
+                  ? null
+                  : (chosen) => _switch(context, ref, chosen!),
+              title: Text(company.name),
+              contentPadding: EdgeInsets.zero,
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              'Switching company reloads your data for that company. You stay '
+              'signed in.',
+              style: context.text.bodySmall
+                  ?.copyWith(color: context.palette.inkSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _switch(
+    BuildContext context,
+    WidgetRef ref,
+    String companyId,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await ref
+        .read(signInControllerProvider.notifier)
+        .switchCompany(companyId);
+    if (!context.mounted) return;
+    if (!ok) {
+      // The controller holds the failure; surface its own message rather than
+      // inventing one, so a refused switch reads the same as any other error.
+      final error = ref.read(signInControllerProvider).error;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error is AppFailure
+                ? error.userMessage
+                : 'That company could not be opened. Please try again.',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -224,9 +390,7 @@ class _SectionHeader extends StatelessWidget {
             .copyWith(color: context.palette.inkTertiary),
       ),
     );
-  }
-}
-
+  }}
 class _MoreTile extends StatelessWidget {
   const _MoreTile({
     required this.icon,
@@ -281,9 +445,7 @@ class _MoreTile extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
+  }}
 /// What this server offers, and how much of it the app has caught up with.
 ///
 /// Read from `GET /me/capabilities`, never hard-coded. The app must not claim a
@@ -332,7 +494,6 @@ class _AvailabilityCard extends ConsumerWidget {
         ),
       );
     }
-
     if (capabilities == null || capabilities.features.isEmpty) {
       // Either the server predates the capabilities endpoint or the call did
       // not get through. Saying so is better than an empty card, which reads
@@ -345,13 +506,13 @@ class _AvailabilityCard extends ConsumerWidget {
         ),
       );
     }
-
     final ready = <AppFeature>[];
     final queued = <AppFeature>[];
     for (final feature in AppFeature.values) {
       if (!capabilities.has(feature)) continue;
       (_built.contains(feature) ? ready : queued).add(feature);
     }
+
     final absent = AppFeature.values
         .where((f) => !capabilities.has(f))
         .toList();
@@ -398,7 +559,6 @@ class _AvailabilityCard extends ConsumerWidget {
       ),
     );
   }
-
   Widget _group(
     BuildContext context,
     String title,
@@ -444,9 +604,7 @@ class _AvailabilityCard extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
+  }}
 /// Build and connection facts.
 ///
 /// Present so that "am I looking at real data?" is answerable inside the app.
@@ -466,7 +624,20 @@ class _AboutCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fact(context, 'Server', Uri.parse(config.apiBaseUrl).host),
+          // The workspace this app is pointed at. Shown by host rather than
+          // full URL: it is what somebody would read out to support.
+          _fact(
+            context,
+            'Workspace',
+            ref.watch(tenantControllerProvider)?.tenantName ?? 'Not set',
+          ),
+          _fact(
+            context,
+            'Server',
+            Uri.tryParse(ref.watch(apiBaseUrlProvider))?.host.isNotEmpty == true
+                ? Uri.parse(ref.watch(apiBaseUrlProvider)).host
+                : 'Not set',
+          ),
           _fact(context, 'Build', config.flavor.name),
           _fact(
             context,
@@ -481,11 +652,11 @@ class _AboutCard extends ConsumerWidget {
           // Odoo backend access to go and look.
           if (modules.isNotEmpty)
             _fact(context, 'HR modules', modules.join(', ')),
+          const _AppIdentityCheck(),
         ],
       ),
     );
   }
-
   Widget _fact(
     BuildContext context,
     String label,
@@ -518,9 +689,7 @@ class _AboutCard extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
+  }}
 /// The Plaza Model roles the user holds, and what each one obliges.
 ///
 /// Shown because a role is the answer to most "why can't I do X?" questions,
@@ -544,7 +713,6 @@ class _RolesCard extends ConsumerWidget {
         ),
       );
     }
-
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,7 +769,6 @@ class _RolesCard extends ConsumerWidget {
       ),
     );
   }
-
   static String _transactionLabel(TransactionType type) => switch (type) {
         TransactionType.leaveRequest => 'Leave requests',
         TransactionType.attendanceRecord => 'Attendance records',
@@ -618,7 +785,6 @@ class _RolesCard extends ConsumerWidget {
         TransactionType.masterData => 'Master data',
       };
 }
-
 /// Where the Plaza catalog and Odoo's real permissions disagree.
 ///
 /// Renders nothing for anyone who cannot act on it — the server sends an empty
@@ -694,9 +860,7 @@ class _DivergenceSection extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
       ],
     );
-  }
-}
-
+  }}
 /// **Role preview.** What a Plaza role actually permits, per the server.
 ///
 /// Distinct from the layout preview on the Welcome screen, which fabricates a
@@ -734,7 +898,6 @@ class _RolePreviewSection extends ConsumerWidget {
       ],
     );
   }
-
   Future<void> _pick(
     BuildContext context,
     WidgetRef ref,
@@ -776,9 +939,7 @@ class _RolePreviewSection extends ConsumerWidget {
     if (selected == null) return;
     ref.read(previewRoleProvider.notifier).state =
         selected.isEmpty ? null : selected;
-  }
-}
-
+  }}
 /// Shown on every screen while a role preview is active.
 ///
 /// Persistent and deliberately loud. A preview that looks like the real thing
@@ -828,5 +989,142 @@ class RolePreviewBanner extends ConsumerWidget {
         ),
       ),
     );
+  }}
+/// Overrides waiting on this person.
+///
+/// Hidden entirely when the override module is not installed — distinct from
+/// an empty queue, which still shows, because "nothing is waiting on you" is
+/// worth knowing and "this deployment has no override workflow" is not.
+class _ApprovalsTile extends ConsumerWidget {
+  const _ApprovalsTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(approvalsAvailableProvider)) return const SizedBox.shrink();
+
+    final waiting = ref.watch(pendingApprovalCountProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader('Approvals'),
+        _MoreTile(
+          icon: Icons.verified_user_outlined,
+          title: 'Override approvals',
+          subtitle: waiting == 0
+              ? 'Nothing is waiting for you'
+              : '$waiting waiting for your decision',
+          onTap: () => context.push(AppRoutes.approvals),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+      ],
+    );
   }
 }
+
+/// Whether this build is the one the server will accept for security devices.
+///
+/// Android refuses a passkey for an app it cannot verify, and says only "RP ID
+/// cannot be validated" — naming neither the app it saw nor the one it wanted.
+/// From the outside that is indistinguishable between a stale build, a
+/// mistyped parameter and a fingerprint missing one character, and the only
+/// way to tell has been to guess.
+///
+/// So both values are shown, and compared. It answers the question in one
+/// glance instead of an afternoon.
+///
+/// Neither is a secret: both are already published by the server at
+/// `/.well-known/assetlinks.json`.
+class _AppIdentityCheck extends ConsumerWidget {
+  const _AppIdentityCheck();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final expectedFingerprint =
+        ref.watch(resolvedCapabilitiesProvider).expectedFingerprint;
+    final identity = ref.watch(appIdentityProvider);
+
+    final actual = identity.valueOrNull?['sha256'];
+    if (actual == null || actual.isEmpty) {
+      // A platform without the bridge, or a build that predates it. Silent
+      // rather than an error row: there is nothing wrong, just nothing to say.
+      return const SizedBox.shrink();
+    }
+    final palette = context.palette;
+    final normalise = (String v) => v.replaceAll(':', '').toUpperCase();
+    final configured =
+        expectedFingerprint != null && expectedFingerprint.isNotEmpty;
+    final matches =
+        configured && normalise(expectedFingerprint) == normalise(actual);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(color: palette.border, height: AppSpacing.md),
+          Row(
+            children: [
+              Icon(
+                matches ? Icons.check_circle_outline : Icons.error_outline,
+                size: AppSizes.iconSm,
+                color: matches ? palette.success : palette.warning,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  matches
+                      ? 'Security devices: this app is recognised'
+                      : configured
+                          ? 'Security devices: this app is NOT recognised'
+                          : 'Security devices: not configured on the server',
+                  style: context.text.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: matches ? palette.success : palette.warning,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!matches) ...[
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              configured
+                  ? 'Passkeys will be refused until these agree. Set '
+                      'sec_webauthn.android_sha256 to the value below, or '
+                      'install the build that matches it.'
+                  : 'Set sec_webauthn.android_package and '
+                      'sec_webauthn.android_sha256 in Perfect HR.',
+              style:
+                  context.text.bodySmall?.copyWith(color: palette.inkSecondary),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _mono(context, 'This app', actual),
+            if (configured) _mono(context, 'Server wants', expectedFingerprint),
+          ],
+        ],
+      ),
+    );
+  }
+  Widget _mono(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: context.text.bodySmall
+                ?.copyWith(color: context.palette.inkTertiary),
+          ),
+          SelectableText(
+            value,
+            style: context.text.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }}

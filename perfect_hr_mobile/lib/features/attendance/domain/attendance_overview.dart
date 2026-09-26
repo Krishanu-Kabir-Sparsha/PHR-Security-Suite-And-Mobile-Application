@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../dashboard/domain/employee_home_summary.dart';
+import '../../../core/utilities/server_time.dart';
 
 /// One check-in/check-out pair.
 ///
@@ -40,8 +41,11 @@ class AttendanceSession {
 
   Map<String, Object?> toJson() => {
         'id': id,
-        'check_in': checkIn.toIso8601String(),
-        'check_out': checkOut?.toIso8601String(),
+        // UTC with a Z, so parseServerTime reads back the same instant.
+        // A local ISO string carries no offset and would be re-read as UTC,
+        // shifting the value on every cache round trip.
+        'check_in': serialiseInstant(checkIn),
+        'check_out': serialiseInstant(checkOut),
         'worked_hours': workedHours,
         'in_city': inCity,
         'out_city': outCity,
@@ -75,7 +79,9 @@ class AttendanceDay {
   factory AttendanceDay.fromJson(Map<String, Object?> json) {
     final sessions = json['sessions'];
     return AttendanceDay(
-      date: DateTime.tryParse('${json['date']}') ?? DateTime.now(),
+      // A calendar day, not an instant -- no zone conversion. Converting it
+      // would move the day itself west of Greenwich.
+      date: parseServerDate(json['date']) ?? DateTime.now(),
       workedMinutes: (json['worked_minutes'] as num?)?.toInt() ?? 0,
       sessions: sessions is List
           ? sessions
@@ -178,7 +184,6 @@ class AttendanceToggleResult {
   }
 }
 
-DateTime? _time(Object? value) {
-  if (value == null) return null;
-  return DateTime.tryParse('$value')?.toLocal();
-}
+// Shared with every other model. See core/utilities/server_time.dart for why
+// a naive server timestamp must be read as UTC rather than as local.
+DateTime? _time(Object? value) => parseServerTime(value);

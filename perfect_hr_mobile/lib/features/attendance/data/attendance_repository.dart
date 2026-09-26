@@ -20,6 +20,13 @@ abstract interface class AttendanceRepository {
     double? longitude,
   });
 
+  /// Close a session left open on an earlier day.
+  ///
+  /// The way out of [AttendanceState.checkedInStale]. The server closes it at
+  /// the end of the working day it belongs to — never at now, which would
+  /// record the intervening days as hours worked.
+  Future<AttendanceOverview> resolveStale();
+
   Future<void> invalidate();
 }
 
@@ -95,6 +102,24 @@ class ApiAttendanceRepository implements AttendanceRepository {
     // is the one place where showing a stale state is actively harmful.
     await _resource.invalidate();
     return AttendanceToggleResult.fromJson(json);
+  }
+
+  @override
+  Future<AttendanceOverview> resolveStale() async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '$path/resolve-stale',
+      // An idempotency key, because this is a mutation worth retrying: the
+      // server treats "nothing stale" as success, so a replay is harmless,
+      // and without a key RetryPolicy refuses to replay it at all.
+      idempotencyKey: 'resolve-stale-${DateTime.now().toIso8601String()}',
+    );
+    await _resource.invalidate();
+    final today = json['today'];
+    return AttendanceOverview(
+      today: TodayAttendance.fromJson(
+        today is Map ? today.cast<String, Object?>() : const {},
+      ),
+    );
   }
 
   @override
@@ -178,6 +203,12 @@ class MockAttendanceRepository implements AttendanceRepository {
       workplaceLabel: _overview.workplaceLabel,
     );
     return AttendanceToggleResult(checkedIn: !wasIn, today: today);
+  }
+
+  @override
+  Future<AttendanceOverview> resolveStale() async {
+    await Future<void>.delayed(latency);
+    return _overview;
   }
 
   @override

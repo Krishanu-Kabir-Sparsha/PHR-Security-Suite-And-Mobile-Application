@@ -1,9 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_override_reason_category_user,override.reason.category user,model_override_reason_category,base.group_user,1,0,0,0
-access_override_reason_category_admin,override.reason.category admin,model_override_reason_category,sec_plaza_rbac.group_security_super_admin,1,1,1,0
-access_override_request_user,override.request user,model_override_request,base.group_user,1,1,1,0
-access_override_request_compliance,override.request compliance,model_override_request,sec_plaza_rbac.group_plaza_compliance,1,1,0,0
-access_override_approval_user,override.approval user,model_override_approval,base.group_user,1,0,0,0
-access_override_approval_compliance,override.approval compliance,model_override_approval,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_override_change_user,override.change user,model_override_change,base.group_user,1,1,1,1
-access_override_change_compliance,override.change compliance,model_override_change,sec_plaza_rbac.group_plaza_compliance,1,0,0,0

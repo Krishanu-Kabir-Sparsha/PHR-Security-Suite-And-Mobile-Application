@@ -6,6 +6,7 @@ import '../session/session_controller.dart';
 import 'app_capabilities.dart';
 import 'model_access.dart';
 import 'capabilities_repository.dart';
+import '../../features/authentication/application/auth_providers.dart';
 
 final capabilitiesRepositoryProvider = Provider<CapabilitiesRepository>((ref) {
   if (ref.watch(dataSourceModeProvider) == DataSourceMode.mock) {
@@ -111,4 +112,11 @@ final previewingRoleProvider = Provider<AssignableRole?>((ref) {
 /// Roles this user may preview. Empty for anyone who cannot administer them.
 final assignableRolesProvider = Provider<List<AssignableRole>>((ref) {
   return ref.watch(resolvedCapabilitiesProvider).assignableRoles;
+});
+
+/// What Android reports about the installed build: package and fingerprint.
+///
+/// Read once and cached for the session; it cannot change while the app runs.
+final appIdentityProvider = FutureProvider<Map<String, String>>((ref) {
+  return ref.watch(passkeyServiceProvider).diagnostics();
 });

@@ -16,10 +16,17 @@ class SessionController extends Notifier<SessionState> {
   SessionState build() => const SessionUnauthenticated();
 
   /// Promotes to an authenticated session. Called only by the authentication
-  /// feature after the identity provider and application API have both
-  /// confirmed the principal.
-  void establish(SessionUser user) {
-    state = SessionAuthenticated(user: user);
+  /// feature after the server has confirmed the principal.
+  void establish(
+    SessionUser user, {
+    bool enrolmentRequired = false,
+    String authMode = 'advance',
+  }) {
+    state = SessionAuthenticated(
+      user: user,
+      enrolmentRequired: enrolmentRequired,
+      authMode: authMode,
+    );
   }
 
   void requireMfa(String challengeId) {
@@ -71,6 +78,8 @@ class SessionController extends Notifier<SessionState> {
       role: role,
       tenantId: 'dev-tenant',
       tenantName: 'Perfect HR Demo Co.',
+      companyId: 'dev-company',
+      companyName: 'Perfect HR Demo Co.',
       permissions: PermissionSet(_devPermissionsFor(role)),
     );
   }

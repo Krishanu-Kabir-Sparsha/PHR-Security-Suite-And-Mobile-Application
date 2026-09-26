@@ -36,6 +36,7 @@ class _StubRepository implements AttendanceRepository {
   final Object? toggleError;
 
   int toggleCount = 0;
+  int resolveStaleCount = 0;
 
   @override
   Future<DataSnapshot<AttendanceOverview>> loadOverview({
@@ -64,6 +65,12 @@ class _StubRepository implements AttendanceRepository {
         );
     _overview = AttendanceOverview(today: result.today, days: _overview.days);
     return result;
+  }
+
+  @override
+  Future<AttendanceOverview> resolveStale() async {
+    resolveStaleCount++;
+    return _overview;
   }
 
   @override

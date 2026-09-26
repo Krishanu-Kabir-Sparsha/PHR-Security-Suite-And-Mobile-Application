@@ -501,8 +501,30 @@ void main() {
       expect(AttendanceState.notCheckedIn.canCheckOut, isFalse);
       expect(AttendanceState.checkedIn.canCheckOut, isTrue);
       expect(AttendanceState.onBreak.canCheckOut, isTrue);
-      expect(AttendanceState.checkedOut.canCheckIn, isFalse);
       expect(AttendanceState.onLeave.canCheckIn, isFalse);
+    });
+
+    test('checking out does not end the day', () {
+      // This asserted isFalse, and that was the bug. `hasActions` is
+      // `canCheckIn || canCheckOut`, so once somebody checked out the Home
+      // card rendered no buttons at all — while the Attendance tab, which
+      // keys on `isWorking` instead, kept offering Check In. The same account
+      // could act on one screen and not the other.
+      //
+      // Checking out for lunch and back in again is one day and two sessions.
+      expect(AttendanceState.checkedOut.canCheckIn, isTrue);
+      expect(AttendanceState.checkedOut.canCheckOut, isFalse);
+    });
+
+    test('a session left open on an earlier day needs attention', () {
+      // Not checkedIn, because the remedy differs and because until it is
+      // closed Odoo's overlap constraint refuses every new check-in.
+      expect(AttendanceState.checkedInStale.needsAttention, isTrue);
+      expect(AttendanceState.checkedIn.needsAttention, isFalse);
+      expect(
+        AttendanceState.fromWire('checked_in_stale'),
+        AttendanceState.checkedInStale,
+      );
     });
   });
 

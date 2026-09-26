@@ -1,5 +1,16 @@
 # PERFECT HR MOBILE — PROJECT STATE
 
+> ## SUPERSEDED — DO NOT USE AS CURRENT STATE
+>
+> This file stopped being updated at "Session 4" and describes a much earlier
+> version of the app. Everything about authentication in it is now wrong: the
+> app no longer uses native passkeys, it uses device binding.
+>
+> **Current state: `../MOBILE_APP_HANDOVER.md` at the repository root.**
+>
+> Kept only as a record of how the foundation was built.
+
+
 > Continuity file per Project Instructions §32–34.
 > **Read this before starting any work.** Commit it with the code; it is the
 > only continuity mechanism across conversation threads.

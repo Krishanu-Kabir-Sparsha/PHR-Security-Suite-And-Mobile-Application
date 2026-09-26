@@ -1,6 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_webauthn_credential_user,sec.webauthn.credential user,model_sec_webauthn_credential,base.group_user,1,1,0,0
-access_webauthn_credential_compliance,sec.webauthn.credential compliance,model_sec_webauthn_credential,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_webauthn_challenge_user,sec.webauthn.challenge user,model_sec_webauthn_challenge,base.group_user,1,0,0,0
-access_recovery_request_user,sec.webauthn.recovery.request user,model_sec_webauthn_recovery_request,base.group_user,1,1,1,0
-access_recovery_approval_user,sec.webauthn.recovery.approval user,model_sec_webauthn_recovery_approval,base.group_user,1,0,0,0

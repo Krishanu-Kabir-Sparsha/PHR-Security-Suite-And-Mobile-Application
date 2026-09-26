@@ -1,7 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_declaration_version_user,declaration.version user,model_declaration_version,base.group_user,1,0,0,0
-access_declaration_version_admin,declaration.version admin,model_declaration_version,sec_plaza_rbac.group_security_super_admin,1,1,1,0
-access_declaration_signoff_user,declaration.signoff own,model_declaration_signoff,base.group_user,1,0,0,0
-access_declaration_signoff_compliance,declaration.signoff compliance,model_declaration_signoff,sec_plaza_rbac.group_plaza_compliance,1,0,0,0
-access_sec_edit_request_user,sec.edit.request user,model_sec_edit_request,base.group_user,1,1,1,0
-access_sec_edit_request_compliance,sec.edit.request compliance,model_sec_edit_request,sec_plaza_rbac.group_plaza_compliance,1,1,0,0

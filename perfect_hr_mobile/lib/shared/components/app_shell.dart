@@ -4,6 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/routing/nav_profile.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../extensions/theme_context.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/data/foreground_refresh.dart';
+import '../../features/attendance/application/attendance_providers.dart';
+import '../../features/dashboard/application/employee_home_providers.dart';
 
 /// Role-aware application shell.
 ///
@@ -30,8 +34,29 @@ class AppShell extends StatelessWidget {
     );
   }
 
+  /// Re-read what other clients can change while the app is in the
+  /// background: attendance, and the home summary that displays it.
+  ///
+  /// Somebody checks in at the office kiosk, on the web dashboard or on a
+  /// biometric terminal, and the phone in their pocket knows nothing about
+  /// it. The home summary is cached for two minutes, so a phone reopened
+  /// straight after a web check-in showed "not checked in" and invited a
+  /// second punch — which Odoo's overlap constraint then refused, leaving the
+  /// user with an error for doing what the screen told them to.
+  static Future<void> _refreshOnResume(WidgetRef ref) async {
+    await ref.read(employeeHomeProvider.notifier).invalidateAndReload();
+    ref.invalidate(attendanceProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return AttendanceForegroundRefresh(
+      refresh: _refreshOnResume,
+      child: _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final palette = context.palette;
 
     return Scaffold(

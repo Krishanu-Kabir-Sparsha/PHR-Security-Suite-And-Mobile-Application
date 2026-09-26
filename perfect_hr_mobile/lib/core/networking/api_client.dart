@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_config.dart';
 import '../errors/app_failure.dart';
+import '../tenant/tenant_providers.dart';
 import 'api_headers.dart';
 import 'auth_interceptor.dart';
 import 'connectivity_service.dart';
@@ -17,18 +18,19 @@ import 'retry_interceptor.dart';
 ///
 /// Spec: Tech-Stack §6, §9, Instructions §7 and §25.
 ///
-/// All traffic goes to [AppConfig.apiBaseUrl], which is the APISIX gateway.
-/// The app has no other outbound host and no direct service or database
-/// access.
+/// [baseUrl] is the workspace the user chose, resolved at run time rather than
+/// compiled in — see `core/tenant/`. The app has exactly one outbound host at a
+/// time and no direct service or database access.
 Dio buildDio({
   required AppConfig config,
+  required String baseUrl,
   required AuthTokenStore tokenStore,
   required ConnectivityService connectivity,
   String clientVersion = 'unknown',
   void Function()? onSessionExpired,
 }) {
   final options = BaseOptions(
-    baseUrl: config.apiBaseUrl,
+    baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 12),
     // Generous read timeout: AI endpoints do real work, and mobile networks in
     // the target market are frequently slow rather than absent.
@@ -237,9 +239,16 @@ final dioFailureMapperProvider = Provider<DioFailureMapper>((ref) {
   return DioFailureMapper(isOffline: () => connectivity.isOffline);
 });
 
+/// Rebuilt whenever the workspace changes.
+///
+/// `watch`, not `read`: pointing the app at a different workspace has to
+/// replace the client, or every subsequent call would go to the previous
+/// customer's server with the new customer's token. Riverpod disposes the old
+/// one through [Ref.onDispose] below.
 final dioProvider = Provider<Dio>((ref) {
   final dio = buildDio(
     config: AppConfig.current,
+    baseUrl: ref.watch(apiBaseUrlProvider),
     tokenStore: ref.watch(authTokenStoreProvider),
     connectivity: ref.watch(connectivityServiceProvider),
   );
@@ -273,7 +282,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 final authDioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
-      baseUrl: AppConfig.current.apiBaseUrl,
+      baseUrl: ref.watch(apiBaseUrlProvider),
       connectTimeout: const Duration(seconds: 12),
       receiveTimeout: const Duration(seconds: 30),
       sendTimeout: const Duration(seconds: 20),

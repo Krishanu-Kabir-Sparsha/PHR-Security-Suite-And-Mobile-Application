@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pair a Device.
+
+    The screen is written for someone holding a phone in one hand: what to
+    type, where to type it, and how long they have. The code is deliberately
+    large and monospaced, because a mistyped character costs one of only five
+    attempts.
+-->
+<odoo>
+
+    <record id="view_device_pair_wizard_form" model="ir.ui.view">
+        <field name="name">sec.device.pair.wizard.form</field>
+        <field name="model">sec.device.pair.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Pair a Device">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>Pair the Perfect HR app</h1>
+                        <p class="text-muted">
+                            This links the app on your phone or tablet to your
+                            account, so it can confirm it is really you when
+                            you sign in or approve something.
+                        </p>
+                    </div>
+
+                    <group>
+                        <group string="On your phone, open Perfect HR and choose &quot;Pair this device&quot;, then enter:">
+                            <field name="user_login" string="Username"/>
+                            <field name="code"
+                                   class="oe_inline"
+                                   style="font-size: 2.1rem; font-family: monospace; letter-spacing: 0.22em; font-weight: 600;"/>
+                            <field name="minutes" string="Valid for (minutes)"/>
+                            <field name="expires_at"/>
+                        </group>
+                    </group>
+
+                    <group string="What happens next">
+                        <div colspan="2" class="text-muted">
+                            <p>
+                                Your phone creates its own private key and keeps
+                                it in the phone's secure storage. Only the public
+                                half is sent here — the private key never leaves
+                                the device, and neither does your fingerprint.
+                            </p>
+                            <p>
+                                After pairing, signing in asks for your password
+                                and then your fingerprint or face on the paired
+                                phone. Approvals ask for the same.
+                            </p>
+                            <p>
+                                <strong>The code works once.</strong> If it
+                                expires or is mistyped too often, generate a new
+                                one with the button below.
+                            </p>
+                        </div>
+                    </group>
+
+                    <group string="Devices already paired to your account">
+                        <field name="existing_devices" nolabel="1" colspan="2"
+                               readonly="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button string="Done" class="btn-primary" special="cancel"/>
+                    <button name="action_regenerate" type="object"
+                            string="Generate a new code" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_device_pair_wizard" model="ir.actions.act_window">
+        <field name="name">Pair a Device</field>
+        <field name="res_model">sec.device.pair.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_device_pair"
+              name="Pair a Device"
+              parent="menu_webauthn"
+              action="action_device_pair_wizard"
+              sequence="15"/>
+
+</odoo>

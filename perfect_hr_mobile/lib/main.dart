@@ -5,6 +5,7 @@ import 'app.dart';
 import 'core/config/app_config.dart';
 import 'core/networking/auth_interceptor.dart';
 import 'core/networking/connectivity_service.dart';
+import 'core/tenant/tenant_providers.dart';
 import 'features/authentication/application/auth_providers.dart';
 
 /// Entry point.
@@ -51,6 +52,22 @@ Future<void> main() async {
       } catch (_) {
         // Start-up must not depend on the connectivity plugin.
       }
+    }
+
+    // The workspace comes back FIRST, and the order is load-bearing rather
+    // than tidy. Every API client's base URL is derived from it, so restoring
+    // the session before the workspace would build a Dio with an empty base
+    // URL and then try to refresh a token against nowhere.
+    //
+    // Time-boxed for the same reason as the session below.
+    try {
+      await container
+          .read(tenantControllerProvider.notifier)
+          .restore()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // No remembered workspace is a normal state, not a failure: the sign-in
+      // screen asks for one.
     }
 
     // Restore a stored session, so a returning user is not shown the sign-in

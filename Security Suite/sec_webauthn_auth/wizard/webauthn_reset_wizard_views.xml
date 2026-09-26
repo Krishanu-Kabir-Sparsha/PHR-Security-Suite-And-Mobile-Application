@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Internal Security Programme
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl). -->
+<odoo>
+
+    <record id="view_webauthn_reset_wizard_form" model="ir.ui.view">
+        <field name="name">sec.webauthn.reset.wizard.form</field>
+        <field name="model">sec.webauthn.reset.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reset Security Device Enrolment">
+                <div class="alert alert-warning" role="alert">
+                    <strong>This permanently deletes security devices.</strong>
+                    Use it when somebody needs to register from scratch: a
+                    replaced handset, a test account, a device retired on
+                    purpose. The audit record is written first, so what was
+                    removed survives even though the credentials do not.
+                </div>
+                <group>
+                    <field name="user_id"
+                           options="{'no_quick_create': True, 'no_create_edit': True}"/>
+                    <field name="credential_count"/>
+                    <field name="credential_summary"
+                           invisible="not credential_summary"/>
+                </group>
+                <group>
+                    <field name="reason"
+                           nolabel="1"
+                           placeholder="Why is this enrolment being cleared? Read during the monthly review."/>
+                </group>
+                <div class="text-muted"
+                     invisible="credential_count != 0">
+                    Nothing to clear. This user can already register a first
+                    device.
+                </div>
+                <footer>
+                    <button name="action_reset"
+                            type="object"
+                            string="Clear enrolment"
+                            class="btn-danger"
+                            invisible="credential_count == 0"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_webauthn_reset_wizard" model="ir.actions.act_window">
+        <field name="name">Reset Enrolment</field>
+        <field name="res_model">sec.webauthn.reset.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!--
+        Under Authenticators, next to the list it operates on, rather than in
+        Settings > Technical. Nobody looks for a security-suite operation in
+        Odoo's technical menu, and the list of enrolled devices is already here.
+    -->
+    <menuitem id="menu_webauthn_reset"
+              name="Reset Enrolment"
+              parent="menu_webauthn"
+              action="action_webauthn_reset_wizard"
+              sequence="30"
+              groups="sec_plaza_rbac.group_security_super_admin"/>
+
+</odoo>

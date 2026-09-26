@@ -25,6 +25,24 @@ class _StubRepository implements AuthenticatorRepository {
     if (f != null) throw f;
     return status;
   }
+
+  // The native enrolment surface. These tests are about what the screen
+  // *reports*, not about running a ceremony, so they are not exercised here --
+  // enrolment_test.dart covers that.
+  @override
+  Future<Map<String, dynamic>?> stepUpChallenge() async => null;
+
+  @override
+  Future<Map<String, dynamic>> enrolmentOptions() async =>
+      const {'challenge': 'stub'};
+
+  @override
+  Future<AuthenticatorStatus> completeEnrolment({
+    required Map<String, dynamic> credential,
+    required String deviceLabel,
+    Map<String, dynamic>? assertion,
+  }) async =>
+      status;
 }
 
 AuthenticatorStatus _status({
@@ -123,7 +141,31 @@ void main() {
   });
 
   group('enrolment affordance', () {
-    testWidgets('offers to enrol the first device when none exist',
+    testWidgets('never offers a native passkey ceremony', (tester) async {
+      // The regression this guards. Creating a passkey from inside the app
+      // needs the OS vendor to validate an app-to-domain association, and on
+      // this deployment it refuses with "[50152] RP ID cannot be validated" --
+      // inside Google Play Services, where there is no server fault to fix.
+      // A prominent primary button that always fails is worse than no button:
+      // it reads as the product being broken rather than unconfigured.
+      final container = _container(_StubRepository(_status()));
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.text('Add this device'), findsNothing);
+      expect(find.text('Enrol this device'), findsNothing);
+    });
+
+    testWidgets('offers the browser, which is the route that works',
+        (tester) async {
+      final container = _container(_StubRepository(_status()));
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.text('Add a passkey using a browser'), findsOneWidget);
+    });
+
+    testWidgets('offers the browser even with nothing enrolled yet',
         (tester) async {
       final container = _container(
         _StubRepository(_status(enrolled: 0, required_: 1)),
@@ -131,16 +173,8 @@ void main() {
       addTearDown(container.dispose);
       await _pump(tester, container);
 
-      expect(find.text('Enrol this device'), findsOneWidget);
-      expect(find.text('Add another device'), findsNothing);
-    });
-
-    testWidgets('offers to add another once one is enrolled', (tester) async {
-      final container = _container(_StubRepository(_status()));
-      addTearDown(container.dispose);
-      await _pump(tester, container);
-
-      expect(find.text('Add another device'), findsOneWidget);
+      expect(find.text('Add a passkey using a browser'), findsOneWidget);
+      expect(find.text('Add this device'), findsNothing);
     });
 
     testWidgets(
@@ -157,8 +191,10 @@ void main() {
       await _pump(tester, container);
 
       expect(find.text('Enrolment is not available yet'), findsOneWidget);
-      expect(find.text('Enrol this device'), findsNothing);
-      expect(find.text('Add another device'), findsNothing);
+      expect(find.text('Add this device'), findsNothing);
+      // The browser route is hidden too: there is nothing configured for it
+      // to reach either.
+      expect(find.text('Add a passkey using a browser'), findsNothing);
     });
 
     testWidgets('states that the fingerprint never leaves the device',
@@ -191,6 +227,37 @@ void main() {
       await _pump(tester, container);
 
       expect(find.text('Work PC'), findsOneWidget);
+    });
+
+    testWidgets('says which entries are this app and which are passkeys',
+        (tester) async {
+      // Three identical key icons is what left a user unable to tell the phone
+      // in their hand from a passkey in a cloud keychain -- and that is exactly
+      // the difference that decides which actions can work where.
+      final container = _container(
+        _StubRepository(
+          _status(
+            devices: [
+              EnrolledAuthenticator(
+                id: '1',
+                label: 'My phone',
+                mechanism: 'bound_device',
+                enrolledAt: DateTime(2026, 9, 23),
+              ),
+              EnrolledAuthenticator(
+                id: '2',
+                label: 'Work PC',
+                enrolledAt: DateTime(2026, 9, 20),
+              ),
+            ],
+          ),
+        ),
+      );
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.textContaining('Paired app'), findsOneWidget);
+      expect(find.textContaining('Passkey'), findsOneWidget);
     });
 
     testWidgets('says plainly when a credential is cloud-synced',
