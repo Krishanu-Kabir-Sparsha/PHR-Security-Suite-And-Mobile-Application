@@ -1,7 +1,7 @@
 name: perfect_hr_mobile
 description: Perfect HR Mobile — AI-powered workforce companion.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.2.0+2
 
 # Dependency set is the approved stack from Tech-Stack §27 and Instructions §6.
 # Constraints are caret ranges; run `flutter pub get` then commit the generated
@@ -32,6 +32,16 @@ dependencies:
   connectivity_plus: ^6.0.5 # Offline detection — UI-UX §48
 
   intl: ^0.19.0 # Dates, numbers, currency (BDT)
+  # Where a mobile check-in was made. The manifest has declared
+  # ACCESS_FINE_LOCATION since the first build and nothing ever read it, so
+  # every punch reached the server with no coordinates -- which the server
+  # correctly treats as "nothing to check", meaning the location rule could
+  # never fire. See features/attendance and models/attendance_geofence.py.
+  #
+  # Permission is requested at the moment of a check-in and never at launch:
+  # asking on first open, before anybody has seen why, is how an app gets
+  # refused permanently.
+  geolocator: ^13.0.1
   # Opens WebAuthn enrolment in a real browser. Android's WebView has no
   # FIDO2 support, so the ceremony cannot run inside the app; see
   # features/settings/presentation/security_screen.dart.

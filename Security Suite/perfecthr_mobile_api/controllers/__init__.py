@@ -4,6 +4,7 @@ from . import device
 from . import me
 from . import authenticators
 from . import capabilities
+from . import subscription
 from . import attendance
 from . import leave
 from . import approvals

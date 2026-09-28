@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'model_access.dart';
+import '../session/session_state.dart';
 
 /// A feature the deployment may or may not offer.
 ///
@@ -40,7 +41,11 @@ enum AppFeature {
   payrollAdmin('payroll_admin', 'Payroll administration',
       'hr_payroll_community'),
   // Served by the mobile API module itself.
-  securityKeys('security_keys', 'Security keys', null);
+  securityKeys('security_keys', 'Security keys', null),
+  // The workspace's own plan. Offered only to administrators, and only where
+  // the deployment actually has a subscription -- the server decides both, so
+  // the key is simply absent for everyone else.
+  subscription('subscription', 'Subscription', null);
 
   const AppFeature(this.wireValue, this.label, this.odooModule);
 
@@ -89,6 +94,8 @@ class AppCapabilities {
     this.assignableRoles = const [],
     this.expectedPackage,
     this.expectedFingerprint,
+    this.isWorkspaceAdmin = false,
+    this.employment,
   });
 
   final Set<AppFeature> features;
@@ -149,7 +156,29 @@ class AppCapabilities {
   final bool hasEmployeeRecord;
 
   /// Diagnostics: the HR modules present on the server.
+  ///
+  /// Empty for everyone who does not administer the workspace. The server
+  /// withholds it rather than the app hiding it, because a payload that
+  /// reaches the handset has left the building -- it is in logs, in crash
+  /// reports and in whatever a proxy kept.
   final List<String> hrModulesInstalled;
+
+  /// Whether this user administers the workspace.
+  ///
+  /// Decides whether the app draws its technical section at all. Sent as its
+  /// own flag rather than inferred from the presence of a diagnostic field,
+  /// because that inference would silently invert the day a field legitimately
+  /// came back empty.
+  final bool isWorkspaceAdmin;
+
+  /// Position and standing, re-read on every foreground refresh.
+  ///
+  /// The sign-in response carries this too, but that is a snapshot of one
+  /// moment: somebody promoted or transferred while the app sat in the
+  /// background would have gone on seeing their old job until they signed out.
+  /// Null where the server did not send it, in which case the session's own
+  /// copy stands.
+  final Employment? employment;
 
   bool has(AppFeature feature) => features.contains(feature);
 
@@ -219,6 +248,7 @@ class AppCapabilities {
         ? rawExpected.cast<String, Object?>()
         : const <String, Object?>{};
     final rawAssignable = json['assignable_roles'];
+    final rawEmployment = json['employment'];
 
     final permissions = <String, ModelAccess>{};
     if (rawPermissions is Map) {
@@ -260,6 +290,10 @@ class AppCapabilities {
       // told us the record is missing, and assuming it is absent would put a
       // "ask HR to complete your profile" banner in front of everyone.
       hasEmployeeRecord: json['has_employee_record'] as bool? ?? true,
+      isWorkspaceAdmin: json['is_workspace_admin'] as bool? ?? false,
+      employment: rawEmployment is Map
+          ? Employment.fromJson(rawEmployment.cast<String, Object?>())
+          : null,
       hrModulesInstalled:
           modules is List ? modules.map((m) => '$m').toList() : const [],
     );

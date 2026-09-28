@@ -5,3 +5,7 @@ from . import test_login_policy
 from . import test_sign_in_checkin
 from . import test_token_rotation
 from . import test_attendance_state
+from . import test_attendance_break
+from . import test_attendance_geofence
+from . import test_employment_profile
+from . import test_subscription

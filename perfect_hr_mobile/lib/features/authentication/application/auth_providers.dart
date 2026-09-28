@@ -11,6 +11,7 @@ import '../../../core/security/device_key_service.dart';
 import '../../../core/security/passkey_service.dart';
 import '../domain/auth_session.dart';
 import '../domain/sign_in_outcome.dart';
+import '../../../core/tenant/tenant_providers.dart';
 
 /// Uses [authApiClientProvider], never [apiClientProvider].
 ///
@@ -30,7 +31,9 @@ final passkeyServiceProvider = Provider<PasskeyService>((ref) {
 /// A provider for the same reason as the one above: no widget test can answer
 /// a real biometric prompt, so tests substitute a fake here.
 final deviceKeyServiceProvider = Provider<DeviceKeyService>((ref) {
-  return LocalAuthDeviceKeyService();
+  // Watched, not read: changing workspace must rebuild this against the new
+  // namespace, or a key paired at one tenant stays reachable at the next.
+  return LocalAuthDeviceKeyService(scope: ref.watch(tenantScopeProvider));
 });
 
 /// Whether this installation is paired, and to whom.
@@ -53,6 +56,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 final secureTokenStoreProvider = Provider<SecureTokenStore>((ref) {
   return SecureTokenStore(
     repository: ref.watch(authRepositoryProvider),
+    scope: ref.watch(tenantScopeProvider),
     // A refresh that happens inside the interceptor must reach the session
     // too, or the UI would keep rendering the identity from the token it
     // replaced.
@@ -248,6 +252,41 @@ class SignInController extends AsyncNotifier<void> {
     // The workspace is deliberately kept. It is not a credential, and making
     // somebody retype their company's address every morning would be a worse
     // app for no gain. "Sign in to a different workspace" is what forgets it.
+  }
+
+  /// Leave this workspace entirely and go back to the address step.
+  ///
+  /// The order here is the whole point, and it is the opposite of what reads
+  /// naturally. Everything that talks to the **old** workspace must happen
+  /// while the app is still pointed at it:
+  ///
+  ///   1. revoke the token server-side, at the tenant that issued it
+  ///   2. wipe that tenant's session and device key from this handset
+  ///   3. only then forget the address
+  ///
+  /// Forgetting the address first would leave the old tenant's refresh token
+  /// on disk under a namespace nothing reaches any more -- valid for thirty
+  /// days, revocable by nobody, on a phone that may be sold or handed on.
+  ///
+  /// The device key goes with it because a pairing is to an account at one
+  /// tenant. Perfect HR tenants are different customers, and a key that
+  /// survived the move would offer one company's device handle, and a
+  /// signature made with its private key, to another.
+  Future<void> leaveWorkspace() async {
+    await signOut();
+
+    // Independent of the session: pairing happens *before* sign-in, so a
+    // handset can hold a key with no token behind it. That is exactly the
+    // case that leaked, and it is why this is not folded into signOut().
+    try {
+      await ref.read(deviceKeyServiceProvider).forget();
+    } catch (_) {
+      // Best effort. The keystore delete failing must not strand somebody on
+      // a workspace they are trying to leave; the key is unreachable under
+      // the next workspace's namespace regardless.
+    }
+
+    await ref.read(tenantControllerProvider.notifier).forget();
   }
 
   /// Move this session to another of the user's companies.

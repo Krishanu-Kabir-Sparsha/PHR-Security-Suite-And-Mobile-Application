@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/app_config.dart';
 import 'tenant_config.dart';
 import 'tenant_repository.dart';
+import 'tenant_scope.dart';
 
 /// Where the chosen workspace is remembered between launches.
 ///
@@ -116,6 +117,15 @@ class TenantController extends Notifier<TenantConfig?> {
 
 final tenantControllerProvider =
     NotifierProvider<TenantController, TenantConfig?>(TenantController.new);
+
+/// Which workspace's credential material the app may currently reach.
+///
+/// Watched by every store that holds a token or a key, so changing workspace
+/// rebuilds them against a different namespace rather than handing one
+/// customer's material to another. See `tenant_scope.dart`.
+final tenantScopeProvider = Provider<TenantScope>((ref) {
+  return TenantScope.of(ref.watch(tenantControllerProvider));
+});
 
 /// The base URL every API call is made against.
 ///

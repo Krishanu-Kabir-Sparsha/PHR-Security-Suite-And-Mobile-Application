@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/networking/auth_interceptor.dart';
+import '../../../core/tenant/tenant_scope.dart';
 import '../domain/auth_session.dart';
 import 'auth_repository.dart';
 
@@ -21,6 +22,7 @@ class SecureTokenStore implements AuthTokenStore {
   SecureTokenStore({
     required AuthRepository repository,
     FlutterSecureStorage? storage,
+    this.scope = TenantScope.none,
     this.onSessionChanged,
     this.onSessionLost,
   })  : _repository = repository,
@@ -29,7 +31,19 @@ class SecureTokenStore implements AuthTokenStore {
               aOptions: AndroidOptions(encryptedSharedPreferences: true),
             );
 
-  static const String _key = 'perfecthr.auth.session';
+  /// The base key, as shipped before workspaces were namespaced. Still read
+  /// once, to adopt an existing install; never written to again.
+  static const String _legacyKey = 'perfecthr.auth.session';
+
+  /// Which workspace this store holds tokens for.
+  ///
+  /// Perfect HR tenants are different customers, so a token minted by one must
+  /// never be reachable while the app is pointed at another. Namespacing the
+  /// key means a session stored for one workspace is simply not found under
+  /// the next — there is no comparison a caller could forget.
+  final TenantScope scope;
+
+  String get _key => scope.key(_legacyKey);
 
   final AuthRepository _repository;
   final FlutterSecureStorage _storage;
@@ -45,7 +59,17 @@ class SecureTokenStore implements AuthTokenStore {
 
   Future<AuthSession?> read() async {
     if (_cached != null) return _cached;
-    final raw = await _storage.read(key: _key);
+    var raw = await _storage.read(key: _key);
+
+    // An install that predates workspace namespacing keeps its session in the
+    // unscoped slot. Adopt it into the current workspace once, rather than
+    // silently signing everybody out on upgrade -- the old value belongs to
+    // whatever workspace the app is pointed at, because there was only ever
+    // one.
+    if ((raw == null || raw.isEmpty) && scope.isResolved) {
+      raw = await _adoptLegacy();
+    }
+
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -98,5 +122,26 @@ class SecureTokenStore implements AuthTokenStore {
   Future<void> clear() async {
     _cached = null;
     await _storage.delete(key: _key);
+    // The unscoped slot too. On an install that never reached [_adoptLegacy]
+    // -- signed out before the first read -- leaving it behind would strand a
+    // thirty-day refresh token on disk with nothing that ever reads it.
+    await _storage.delete(key: _legacyKey);
+  }
+
+  /// Move a pre-namespacing session into this workspace's slot.
+  ///
+  /// Returns the raw value so the caller can use it on this same pass. Any
+  /// failure returns null and leaves the legacy value alone: the cost is one
+  /// extra sign-in, where a thrown exception here would be a crash on launch.
+  Future<String?> _adoptLegacy() async {
+    try {
+      final legacy = await _storage.read(key: _legacyKey);
+      if (legacy == null || legacy.isEmpty) return null;
+      await _storage.write(key: _key, value: legacy);
+      await _storage.delete(key: _legacyKey);
+      return legacy;
+    } catch (_) {
+      return null;
+    }
   }
 }

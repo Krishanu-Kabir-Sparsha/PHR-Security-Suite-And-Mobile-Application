@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
+import '../tenant/tenant_scope.dart';
 
 /// This installation's own signing key, and the fingerprint prompt that
 /// releases it.
@@ -164,19 +165,34 @@ class LocalAuthDeviceKeyService implements DeviceKeyService {
   LocalAuthDeviceKeyService({
     FlutterSecureStorage? storage,
     LocalAuthentication? localAuth,
+    this.scope = TenantScope.none,
   })  : _storage = storage ??
             const FlutterSecureStorage(
               aOptions: AndroidOptions(encryptedSharedPreferences: true),
             ),
         _localAuth = localAuth ?? LocalAuthentication();
 
+  /// Which workspace this installation's key belongs to.
+  ///
+  /// Perfect HR tenants are different customers. A key paired against one must
+  /// never be offered to another: the handle identifies an account at the
+  /// first, and a signature made with it is proof of possession handed to a
+  /// company with no business holding it. Namespacing the storage key makes
+  /// that impossible rather than something a caller must check.
+  final TenantScope scope;
+
   /// Bumped only by a breaking change to what gets signed, and matched against
   /// the server's SIGNATURE_DOMAIN. A mismatch is a clear refusal rather than a
   /// signature that mysteriously fails to verify.
   static const String signatureDomain = 'perfecthr-device-v1';
 
-  static const String _bindingKey = 'perfecthr.device.binding';
-  static const String _privateKeyKey = 'perfecthr.device.privatekey';
+  /// Base keys, as shipped before workspaces were namespaced. Read once each,
+  /// to adopt an existing install; never written to again.
+  static const String _legacyBindingKey = 'perfecthr.device.binding';
+  static const String _legacyPrivateKeyKey = 'perfecthr.device.privatekey';
+
+  String get _bindingKey => scope.key(_legacyBindingKey);
+  String get _privateKeyKey => scope.key(_legacyPrivateKeyKey);
 
   final FlutterSecureStorage _storage;
   final LocalAuthentication _localAuth;
@@ -199,7 +215,17 @@ class LocalAuthDeviceKeyService implements DeviceKeyService {
 
   @override
   Future<DeviceBinding?> get binding async {
-    final raw = await _read(_bindingKey);
+    var raw = await _read(_bindingKey);
+
+    // A handset paired before workspaces were namespaced keeps its key in the
+    // unscoped slots. Adopt the pair into the current workspace once, so an
+    // already-paired phone is not asked to pair again on upgrade. Both halves
+    // move together or neither does: a binding without its private key is a
+    // device that believes it is paired and cannot sign.
+    if ((raw == null || raw.isEmpty) && scope.isResolved) {
+      raw = await _adoptLegacyPairing();
+    }
+
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -335,7 +361,40 @@ class LocalAuthDeviceKeyService implements DeviceKeyService {
   Future<void> forget() async {
     await _storage.delete(key: _bindingKey);
     await _storage.delete(key: _privateKeyKey);
+    // The unscoped slots too, for an install that was never read under the new
+    // scheme. Leaving a private key on disk that nothing will ever use again
+    // is the kind of residue a device handed to somebody else should not carry.
+    await _storage.delete(key: _legacyBindingKey);
+    await _storage.delete(key: _legacyPrivateKeyKey);
     _pendingSeed = null;
+  }
+
+  /// Move a pre-namespacing pairing into this workspace's slots.
+  ///
+  /// Returns the raw binding so the caller can use it on this same pass, or
+  /// null when there is nothing to adopt. **Both halves move or neither does**
+  /// -- a binding whose private key failed to copy would present a handle the
+  /// device can no longer sign for, which reads to the server as a cloned key.
+  Future<String?> _adoptLegacyPairing() async {
+    try {
+      final binding = await _read(_legacyBindingKey);
+      final privateKey = await _read(_legacyPrivateKeyKey);
+      if (binding == null ||
+          binding.isEmpty ||
+          privateKey == null ||
+          privateKey.isEmpty) {
+        return null;
+      }
+      await _storage.write(key: _privateKeyKey, value: privateKey);
+      await _storage.write(key: _bindingKey, value: binding);
+      await _storage.delete(key: _legacyPrivateKeyKey);
+      await _storage.delete(key: _legacyBindingKey);
+      return binding;
+    } catch (_) {
+      // Unpaired is a recoverable state with a screen that fixes it; a throw
+      // here would be a crash on the sign-in path.
+      return null;
+    }
   }
 
   /// Raise the platform prompt. True only if the user actually passed it.

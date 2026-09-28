@@ -51,6 +51,10 @@ abstract final class AppRoutes {
   static const String profile = '/more/profile';
   static const String security = '/more/security';
 
+  /// SET-03. Reached only from More, and only by administrators -- the server
+  /// refuses the payload to anybody else, so the tile is simply not drawn.
+  static const String subscription = '/more/subscription';
+
   // Manager branch
   static const String employee360 = '/team/:employeeId';
   static String employee360For(String id) => '/team/$id';

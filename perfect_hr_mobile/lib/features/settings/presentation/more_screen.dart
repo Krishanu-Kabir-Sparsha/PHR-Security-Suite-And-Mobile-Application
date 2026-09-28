@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/capabilities/app_capabilities.dart';
 import '../../approvals/application/approvals_providers.dart';
@@ -44,6 +45,12 @@ class MoreScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(activeUserProvider);
+    final capabilities = ref.watch(resolvedCapabilitiesProvider);
+    final liveEmployment = capabilities.employment;
+    // Decided by the server, not inferred here. Technical facts are withheld
+    // from the payload for everyone else, so this flag and the data it gates
+    // always agree.
+    final isAdmin = capabilities.isWorkspaceAdmin;
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
@@ -61,9 +68,10 @@ class MoreScreen extends ConsumerWidget {
           // before what they may do. Null when HR has not filled the record
           // in, and then nothing is drawn -- a card of dashes reads as broken.
           if (user != null &&
-              _ProfileCard.employmentCard(context, user) != null) ...[
+              _ProfileCard.employmentCard(context, user, live: liveEmployment) !=
+                  null) ...[
             const SizedBox(height: AppSpacing.sm),
-            _ProfileCard.employmentCard(context, user)!,
+            _ProfileCard.employmentCard(context, user, live: liveEmployment)!,
           ],
 
           // Only where there is somewhere to switch to.
@@ -110,6 +118,16 @@ class MoreScreen extends ConsumerWidget {
             // the user must be able to come back with the system back gesture.
             onTap: () => context.push(AppRoutes.security),
           ),
+          // Offered only where the server said there is a plan AND this user
+          // administers it. Both conditions are the server's call, so an
+          // ordinary employee never sees a tile that would refuse them.
+          if (ref.watch(hasFeatureProvider(AppFeature.subscription)))
+            _MoreTile(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Subscription',
+              subtitle: 'Your plan, renewal date and usage',
+              onTap: () => context.push(AppRoutes.subscription),
+            ),
           _MoreTile(
             icon: Icons.logout_outlined,
             title: 'Sign out',
@@ -119,12 +137,16 @@ class MoreScreen extends ConsumerWidget {
           ),
 
           const SizedBox(height: AppSpacing.lg),
-          const _SectionHeader('Modules'),
-          const _AvailabilityCard(),
+          // "What Perfect HR can do for you here", not "Modules". The list
+          // below answers which parts of the product this company has and
+          // which are ready on the phone -- an organisational question, so it
+          // gets an organisational heading.
+          const _SectionHeader('Your Perfect HR'),
+          _AvailabilityCard(showTechnicalNames: isAdmin),
 
           const SizedBox(height: AppSpacing.lg),
           const _SectionHeader('About'),
-          const _AboutCard(),
+          _AboutCard(showTechnical: isAdmin),
         ],
       ),
     );
@@ -233,8 +255,18 @@ class _ProfileCard extends ConsumerWidget {
   ///
   /// Renders nothing when HR has not filled the record in. An empty card with
   /// four dashes in it says "broken"; no card says "nothing to show yet".
-  static Widget? employmentCard(BuildContext context, SessionUser user) {
-    final employment = user.employment;
+  static Widget? employmentCard(
+    BuildContext context,
+    SessionUser user, {
+    Employment? live,
+  }) {
+    // The capabilities read, when it has one, beats the session's copy.
+    //
+    // The session payload is a snapshot of the moment somebody signed in, and
+    // sessions here last thirty days. Capabilities are re-read whenever the
+    // app returns to the foreground, so a promotion, a transfer or a contract
+    // ending shows up the same day rather than at the next sign-in.
+    final employment = live ?? user.employment;
     if (employment == null || employment.isEmpty) return null;
 
     final rows = <(String, String)>[
@@ -242,13 +274,27 @@ class _ProfileCard extends ConsumerWidget {
         ('Employee ID', employment.employeeCode!),
       if (employment.jobPosition != null)
         ('Position', employment.jobPosition!),
+      if (employment.employeeType != null)
+        ('Employment', employment.employeeType!),
       if (employment.department != null)
         ('Department', employment.department!),
       if (employment.manager != null) ('Reports to', employment.manager!),
       if (employment.workLocation != null)
         ('Work location', employment.workLocation!),
       if (employment.shift != null) ('Shift', employment.shift!),
-      if (employment.status != null) ('Status', _statusLabel(employment.status!)),
+      // Only where the contract record can actually say. It is left blank for
+      // anyone whose joining date cannot be established, because the value
+      // that used to fill it -- the date their record was created -- read as
+      // the migration date for every employee of a company that moved in.
+      if (employment.joinedOn != null)
+        ('Joined', _friendlyDate(employment.joinedOn!)),
+      if (employment.contractEnd != null)
+        ('Contract ends', _friendlyDate(employment.contractEnd!)),
+      if (employment.statusLabel != null || employment.status != null)
+        (
+          'Status',
+          employment.statusLabel ?? _statusLabel(employment.status!),
+        ),
     ];
     if (rows.isEmpty) return null;
 
@@ -282,6 +328,19 @@ class _ProfileCard extends ConsumerWidget {
   }
 
   /// Odoo's contract states are internal words. These are the ones people use.
+  /// `2019-03-01` as `1 March 2019`, or unchanged when it will not parse.
+  ///
+  /// A plain date from the server, with no time and no zone, so it is
+  /// formatted rather than converted -- running it through the local-time path
+  /// would move a joining date across a day boundary for anyone west of UTC.
+  static String _friendlyDate(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    return parsed == null ? raw : DateFormat.yMMMMd().format(parsed);
+  }
+
+  /// Kept as the fallback for a server that predates
+  /// `employment_status_label`. New deployments send the wording themselves so
+  /// the phone and the web never disagree about what a contract state means.
   static String _statusLabel(String state) => switch (state) {
         'draft' => 'Awaiting contract',
         'open' => 'Active',
@@ -460,7 +519,15 @@ class _MoreTile extends StatelessWidget {
 /// * **Not installed** — nothing to build until the module is added in Odoo.
 ///   No amount of app work makes these appear.
 class _AvailabilityCard extends ConsumerWidget {
-  const _AvailabilityCard();
+  const _AvailabilityCard({this.showTechnicalNames = false});
+
+  /// Whether to name the Odoo module behind an absent feature.
+  ///
+  /// False for everyone who does not administer the workspace. "Recruitment --
+  /// needs hr_recruitment" tells an employee to go looking in a backend they
+  /// cannot open, for a thing they cannot install. "Not part of your plan"
+  /// tells them who to ask.
+  final bool showTechnicalNames;
 
   /// Features with a real screen behind them today. Every other feature the
   /// server reports is queued rather than available.
@@ -489,7 +556,7 @@ class _AvailabilityCard extends ConsumerWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: AppSpacing.sm),
-            Text('Checking what your server offers'),
+            Text('Checking what your workspace includes'),
           ],
         ),
       );
@@ -500,8 +567,8 @@ class _AvailabilityCard extends ConsumerWidget {
       // as "your server has nothing".
       return AppCard(
         child: Text(
-          "The app couldn't read your server's module list. Everything you can "
-          'see elsewhere in the app is still real data from your account.',
+          "We couldn't check what your workspace includes just now. Everything "
+          'you can see elsewhere in the app is still your own real data.',
           style: context.text.bodySmall,
         ),
       );
@@ -525,9 +592,9 @@ class _AvailabilityCard extends ConsumerWidget {
         children: [
           if (!capabilities.hasEmployeeRecord) ...[
             Text(
-              'Your login is not linked to an employee record yet, so your own '
-              'attendance and leave cannot be shown. Ask HR to complete your '
-              'profile in Perfect HR.',
+              'Your login is not linked to your employee file yet, so your own '
+              'attendance and leave cannot be shown. Ask HR to finish setting '
+              'up your profile.',
               style: context.text.bodySmall
                   ?.copyWith(color: palette.onWarningContainer),
             ),
@@ -542,18 +609,18 @@ class _AvailabilityCard extends ConsumerWidget {
           ),
           _group(
             context,
-            'On your server, coming to the app',
+            'Your company has these, coming to the app soon',
             queued,
             Icons.schedule_outlined,
             palette.inkTertiary,
           ),
           _group(
             context,
-            'Not installed on your server',
+            'Not part of your workspace',
             absent,
             Icons.remove_circle_outline,
             palette.inkTertiary,
-            showModule: true,
+            showModule: showTechnicalNames,
           ),
         ],
       ),
@@ -591,6 +658,7 @@ class _AvailabilityCard extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
+
                       showModule && feature.odooModule != null
                           ? '${feature.label} — needs ${feature.odooModule}'
                           : feature.label,
@@ -612,13 +680,24 @@ class _AvailabilityCard extends ConsumerWidget {
 /// mock names, and the previous build shipped with a dev switcher that silently
 /// put a real session on fabricated figures.
 class _AboutCard extends ConsumerWidget {
-  const _AboutCard();
+  const _AboutCard({this.showTechnical = false});
+
+  /// Whether to draw the deployment facts: the server host, the build
+  /// flavour, the installed module list and the signing-fingerprint check.
+  ///
+  /// False for everyone who does not administer the workspace. They are real
+  /// tools -- a passkey that will not enrol is diagnosed from the fingerprint
+  /// pair in seconds and from anywhere else in hours -- but they are tools for
+  /// the person rolling the app out, and an employee reading "Build: dev" has
+  /// been told something about the deployment instead of about their work.
+  final bool showTechnical;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = AppConfig.current;
     final mode = ref.watch(dataSourceModeProvider);
     final modules = ref.watch(resolvedCapabilitiesProvider).hrModulesInstalled;
+    final company = ref.watch(activeUserProvider)?.companyName;
 
     return AppCard(
       child: Column(
@@ -626,37 +705,59 @@ class _AboutCard extends ConsumerWidget {
         children: [
           // The workspace this app is pointed at. Shown by host rather than
           // full URL: it is what somebody would read out to support.
+          // The organisation this session belongs to, which is what somebody
+          // would actually read out when asked "where do you work?".
           _fact(
             context,
             'Workspace',
             ref.watch(tenantControllerProvider)?.tenantName ?? 'Not set',
           ),
-          _fact(
-            context,
-            'Server',
-            Uri.tryParse(ref.watch(apiBaseUrlProvider))?.host.isNotEmpty == true
-                ? Uri.parse(ref.watch(apiBaseUrlProvider)).host
-                : 'Not set',
-          ),
-          _fact(context, 'Build', config.flavor.name),
-          _fact(
-            context,
-            'Data',
-            mode == DataSourceMode.live
-                ? 'Live from your account'
-                : 'Sample data (development)',
-            warn: mode != DataSourceMode.live,
-          ),
-          // The installed HR modules, verbatim. This answers "what does my
-          // server actually run?" from the phone, without needing someone with
-          // Odoo backend access to go and look.
-          if (modules.isNotEmpty)
-            _fact(context, 'HR modules', modules.join(', ')),
-          const _AppIdentityCheck(),
+          if (company != null) _fact(context, 'Company', company),
+          // Sample data is called out for everyone, admin or not. A real
+          // session quietly sitting on fabricated figures is the one thing
+          // here that could mislead somebody into acting on a wrong number,
+          // and a previous build shipped exactly that.
+          if (mode != DataSourceMode.live)
+            _fact(
+              context,
+              'Data',
+              'Sample data (development)',
+              warn: true,
+            ),
+
+          // ---- Deployment facts, for whoever administers this workspace ----
+          if (showTechnical) ...[
+            Divider(color: context.palette.border, height: AppSpacing.md),
+            Text(
+              'Technical details',
+              style: context.text.labelSmall
+                  ?.copyWith(color: context.palette.inkTertiary),
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            // The server's own canonical address wins over the host this
+            // handset happened to dial. They differ whenever a tenant is
+            // reached through an alias or a bare IP during setup, and the
+            // dialled one would then send somebody to the wrong place.
+            _fact(context, 'Address', _workspaceAddress(ref)),
+            _fact(context, 'Build', config.flavor.name),
+            if (modules.isNotEmpty)
+              _fact(context, 'HR modules', modules.join(', ')),
+            const _AppIdentityCheck(),
+          ],
         ],
       ),
     );
   }
+  /// Canonical first, dialled host second, and an honest blank otherwise.
+  static String _workspaceAddress(WidgetRef ref) {
+    final canonical = ref.watch(activeUserProvider)?.tenantUrl;
+    if (canonical != null && canonical.isNotEmpty) {
+      return Uri.tryParse(canonical)?.host ?? canonical;
+    }
+    final dialled = Uri.tryParse(ref.watch(apiBaseUrlProvider));
+    return dialled?.host.isNotEmpty == true ? dialled!.host : 'Not set';
+  }
+
   Widget _fact(
     BuildContext context,
     String label,

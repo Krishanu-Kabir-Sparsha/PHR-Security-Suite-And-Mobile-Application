@@ -19,6 +19,7 @@ import 'package:perfect_hr_mobile/features/attendance/presentation/attendance_sc
 import 'package:perfect_hr_mobile/features/dashboard/application/employee_home_providers.dart';
 import 'package:perfect_hr_mobile/features/dashboard/data/employee_home_repository.dart';
 import 'package:perfect_hr_mobile/features/dashboard/domain/employee_home_summary.dart';
+import 'package:perfect_hr_mobile/core/security/punch_location_service.dart';
 
 /// E-02 Attendance.
 ///
@@ -37,6 +38,9 @@ class _StubRepository implements AttendanceRepository {
 
   int toggleCount = 0;
   int resolveStaleCount = 0;
+  int breakCount = 0;
+  String? sentOffSiteReason;
+  double? sentLatitude;
 
   @override
   Future<DataSnapshot<AttendanceOverview>> loadOverview({
@@ -49,8 +53,12 @@ class _StubRepository implements AttendanceRepository {
   Future<AttendanceToggleResult> toggle({
     double? latitude,
     double? longitude,
+    double? accuracyMetres,
+    String? offSiteReason,
   }) async {
     toggleCount++;
+    sentOffSiteReason = offSiteReason;
+    sentLatitude = latitude;
     final error = toggleError;
     if (error != null) throw error;
 
@@ -65,6 +73,15 @@ class _StubRepository implements AttendanceRepository {
         );
     _overview = AttendanceOverview(today: result.today, days: _overview.days);
     return result;
+  }
+
+  @override
+  Future<AttendanceToggleResult> toggleBreak({String? breakType}) async {
+    breakCount++;
+    return AttendanceToggleResult(
+      checkedIn: _overview.today.state.isWorking,
+      today: _overview.today,
+    );
   }
 
   @override
@@ -103,6 +120,12 @@ ProviderContainer _container(
   final container = ProviderContainer(
     overrides: [
       attendanceRepositoryProvider.overrideWithValue(repository),
+      // No platform channel in a widget test, so the real geolocator never
+      // answers and pumpAndSettle times out waiting for a fix that cannot
+      // arrive. NoPunchLocationService returns null immediately, which is
+      // also the production behaviour when permission is denied.
+      punchLocationServiceProvider
+          .overrideWithValue(const NoPunchLocationService()),
       // The punch button is gated on the server's own has_access answer, so a
       // test that grants nothing gets a correctly-disabled button.
       capabilitiesRepositoryProvider.overrideWithValue(

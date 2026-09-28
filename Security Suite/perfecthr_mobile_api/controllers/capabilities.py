@@ -93,6 +93,28 @@ FEATURE_MATRIX = [
     ("security_keys", None, None),
 ]
 
+# Features whose gate is a question this module answers itself, rather than a
+# module being installed or an Odoo group being held.
+#
+# Kept out of FEATURE_MATRIX because that table is a pure (module, group) lookup
+# and folding a callable into it would make every row harder to read for the
+# sake of one exception.
+def _subscription_visible(user):
+    """Whether to offer the Subscription screen at all.
+
+    Two conditions, and both must hold: the user administers the workspace,
+    and this database actually has a subscription to show. Offering the tile
+    on an on-premise install would lead every administrator to an empty
+    screen, which reads as a broken feature rather than an absent one.
+    """
+    if not user._may_view_subscription():
+        return False
+    return (
+        bool(request.env["ir.config_parameter"].sudo().get_param(
+            "saas.subscription_info"
+        ))
+    )
+
 # Models whose CRUD the app needs in order to decide what to offer.
 #
 # Answered by asking Odoo -- ``has_access`` on an empty recordset, which is the
@@ -151,6 +173,30 @@ class MobileCapabilities(http.Controller):
             return user.has_group(xmlid)
         except ValueError:
             return False
+
+    def _may_view_diagnostics(self, user):
+        """Whether to send this user the technical facts about the deployment.
+
+        Module names, the server host, the build flavour and the app's signing
+        fingerprint are deployment facts. They are genuinely useful -- a
+        passkey that will not enrol is diagnosed from the fingerprint pair in
+        seconds and from anywhere else in hours -- but they are useful to the
+        person rolling the app out, not to the employee using it.
+
+        Withheld at the server rather than merely hidden in the app, because a
+        payload that reaches the handset has left the building: it is in logs,
+        in crash reports and in whatever a proxy kept. Narrower than
+        ``_may_view_subscription``: an HR manager administers people, not
+        servers.
+        """
+        return any(
+            self._has_group(user, xmlid)
+            for xmlid in (
+                "base.group_system",
+                "sec_plaza_rbac.group_security_super_admin",
+                "sec_plaza_rbac.group_plaza_admin",
+            )
+        )
 
     def _permissions(self):
         """Real CRUD per model, as Odoo itself answers it.
@@ -446,11 +492,15 @@ class MobileCapabilities(http.Controller):
                 continue
             features.append(key)
 
+        if _subscription_visible(user):
+            features.append("subscription")
+
         employee = request_employee()
         company = request_company()
 
         permissions = self._permissions()
         roles = self._roles(user)
+        diagnostics = self._may_view_diagnostics(user)
         previewing = None
 
         if preview_role:
@@ -533,17 +583,9 @@ class MobileCapabilities(http.Controller):
                 # is what the app re-reads when it comes back to the foreground,
                 # so a promotion or a transfer shows up without signing out --
                 # whereas the sign-in payload is a snapshot of one moment.
-                "employment": {
-                    "employee_code": employee.identification_id or None,
-                    "job_position": employee.job_id.name or None,
-                    "job_title": employee.job_title or None,
-                    "department": employee.department_id.name or None,
-                    "manager": employee.parent_id.name or None,
-                    "work_location": employee.work_location_id.name or None,
-                    "shift": employee.resource_calendar_id.name or None,
-                }
-                if employee
-                else None,
+                "employment": request.env["perfecthr.mobile.employment"].card(
+                    employee
+                ),
                 # Which company this session is operating in, and which others
                 # the user could switch to via POST /auth/company. Sent so the
                 # app can show the current company in its header rather than
@@ -569,7 +611,9 @@ class MobileCapabilities(http.Controller):
                 # support round-trip through someone with Odoo backend access.
                 "hr_modules_installed": sorted(
                     name for name in installed if name.startswith("hr")
-                ),
+                )
+                if diagnostics
+                else [],
                 # What this server will accept as the mobile app.
                 #
                 # Reported so the app can hold it against its own signing
@@ -588,6 +632,14 @@ class MobileCapabilities(http.Controller):
                     "sha256": params.get_param(
                         "sec_webauthn.android_sha256", ""
                     ),
-                },
+                }
+                if diagnostics
+                else {},
+                # Whether this user administers the workspace, which is what
+                # decides if the app draws its technical section at all. Sent
+                # explicitly so the app never has to infer "is an admin" from
+                # the presence of a diagnostic field -- an inference that would
+                # silently invert the day a field legitimately went empty.
+                "is_workspace_admin": diagnostics,
             }
         )

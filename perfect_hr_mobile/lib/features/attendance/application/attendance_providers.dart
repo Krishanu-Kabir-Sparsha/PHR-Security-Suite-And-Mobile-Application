@@ -8,6 +8,7 @@ import '../../../core/networking/connectivity_service.dart';
 import '../../dashboard/application/employee_home_providers.dart';
 import '../data/attendance_repository.dart';
 import '../domain/attendance_overview.dart';
+import '../../../core/security/punch_location_service.dart';
 
 final attendanceRepositoryProvider = Provider<AttendanceRepository>((ref) {
   if (ref.watch(dataSourceModeProvider) == DataSourceMode.mock) {
@@ -65,10 +66,25 @@ class AttendanceToggleController extends AsyncNotifier<AttendanceToggleResult?> 
 
   /// Returns the result on success, or null when it failed — in which case the
   /// error is held in [state] for the screen to render.
-  Future<AttendanceToggleResult?> toggle() async {
+  ///
+  /// [offSiteReason] is sent only on a second attempt, after the server has
+  /// said the punch looks far from the employee's work location and the user
+  /// has explained why. Its presence turns a refusal into a flagged
+  /// acceptance; see `models/attendance_geofence.py`.
+  Future<AttendanceToggleResult?> toggle({String? offSiteReason}) async {
     state = const AsyncValue.loading();
     try {
-      final result = await ref.read(attendanceRepositoryProvider).toggle();
+      // Best effort, always. A location failure must never stop a punch —
+      // this returns null for a denied permission, a disabled radio or a
+      // timeout, and the server reads an absent fix as "nothing to check".
+      final where = await ref.read(punchLocationServiceProvider).current();
+
+      final result = await ref.read(attendanceRepositoryProvider).toggle(
+            latitude: where?.latitude,
+            longitude: where?.longitude,
+            accuracyMetres: where?.accuracyMetres,
+            offSiteReason: offSiteReason,
+          );
       state = AsyncValue.data(result);
 
       // Both screens are now stale: the attendance screen obviously, and Home
@@ -82,6 +98,27 @@ class AttendanceToggleController extends AsyncNotifier<AttendanceToggleResult?> 
       // Held rather than rethrown so the screen can render this failure's own
       // user message. ApiClient guarantees an AppFailure, so nothing technical
       // can reach the user from here.
+      state = AsyncValue.error(error, stack);
+      return null;
+    }
+  }
+
+  /// Start or end a break, then reload both screens.
+  ///
+  /// Deliberately not folded into [toggle]. A break is recorded *inside* the
+  /// session; a toggle ends it. Sharing one entry point would make "I am
+  /// going for lunch" and "I am going home" the same button press.
+  Future<AttendanceToggleResult?> toggleBreak({String? breakType}) async {
+    state = const AsyncValue.loading();
+    try {
+      final result = await ref
+          .read(attendanceRepositoryProvider)
+          .toggleBreak(breakType: breakType);
+      state = AsyncValue.data(result);
+      ref.invalidate(attendanceProvider);
+      unawaited(ref.read(employeeHomeProvider.notifier).invalidateAndReload());
+      return result;
+    } catch (error, stack) {
       state = AsyncValue.error(error, stack);
       return null;
     }

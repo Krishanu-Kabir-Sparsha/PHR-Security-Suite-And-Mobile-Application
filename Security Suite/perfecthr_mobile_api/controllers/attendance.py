@@ -100,6 +100,65 @@ class MobileAttendance(http.Controller):
     def _service(self):
         return request.env["perfecthr.mobile.checkin"].sudo()
 
+    def _evaluate_location(self, employee, data):
+        """Run the location check, unless the caller already explained itself.
+
+        A payload carrying ``off_site_reason`` is the second attempt: the user
+        has been told they look far from work and has said why. That is
+        accepted and flagged rather than refused again -- refusing a reason
+        that was asked for would be a dead end.
+        """
+        reason = (data.get("off_site_reason") or "").strip()
+        result = (
+            request.env["perfecthr.attendance.geofence"]
+            .sudo()
+            .evaluate(
+                employee,
+                self._as_float(data.get("latitude")),
+                self._as_float(data.get("longitude")),
+                accuracy_m=self._as_float(data.get("accuracy_m")),
+            )
+        )
+        if reason and result["outcome"] == "refuse":
+            return {**result, "outcome": "flag"}
+        return result
+
+    def _flag_off_site(self, employee, fence, data):
+        """Mark the row just created as an off-site punch, for HR review."""
+        session = self._service().open_session(employee)
+        if not session:
+            return
+        reason = (data.get("off_site_reason") or "").strip()
+        session.sudo().write(
+            {
+                "off_site": True,
+                "off_site_reason": reason[:1000] or False,
+                "off_site_distance_m": fence.get("distance_m") or 0,
+            }
+        )
+        _logger.info(
+            "Off-site check-in recorded for %s at %sm from %s",
+            employee.name,
+            fence.get("distance_m"),
+            fence.get("location_name"),
+        )
+
+    @staticmethod
+    def _as_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _distance_label(metres):
+        """A distance a person can picture, rather than a bare number."""
+        if not metres:
+            return "some distance"
+        if metres < 1000:
+            return "%d metres" % int(round(metres / 10.0) * 10)
+        return "%.1f km" % (metres / 1000.0)
+
     def _serialise(self, attendance):
         return self._service().serialise_session(attendance)
 
@@ -181,6 +240,74 @@ class MobileAttendance(http.Controller):
                 "shift_label": employee.resource_calendar_id.name or None,
                 "workplace_label": employee.work_location_id.name or None,
                 "days": sorted(by_day.values(), key=lambda d: d["date"], reverse=True),
+            }
+        )
+
+    @http.route(
+        "/api/mobile/v1/me/attendance/break",
+        type="http",
+        auth="public",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    @authenticated
+    def toggle_break(self, **kwargs):
+        """Start or end a break inside the current session.
+
+        A toggle, for the same reason the check-in is: the phone may have been
+        offline while the break was ended somewhere else, and a client that
+        picks the direction eventually picks the wrong one.
+
+        A break is recorded **inside** the attendance rather than as a
+        check-out and a check-back-in. Two rows would say "left and came back"
+        and lose the distinction between a tea break and going home early --
+        see ``models/attendance_break.py``.
+        """
+        employee = self._employee()
+        if not employee:
+            return self._no_employee()
+
+        data = _payload() or kwargs
+        session = self._service().open_session(employee)
+        if not session:
+            return fail(
+                409,
+                "You are not checked in, so there is no session to take a "
+                "break from.",
+                code="not_checked_in",
+                log="break toggled while checked out by %s"
+                % request.env.user.login,
+            )
+
+        running = session.break_ids.filtered(lambda b: not b.break_end)
+        try:
+            if running:
+                session.sudo().end_break()
+                direction = "break_end"
+            else:
+                session.sudo().start_break(
+                    break_type=data.get("break_type") or "short",
+                    source="mobile",
+                )
+                direction = "break_start"
+        except (UserError, ValidationError) as error:
+            return fail(
+                422,
+                str(error),
+                code="break_rejected",
+                log="break rejected for %s: %s" % (request.env.user.login, error),
+            )
+
+        session.invalidate_recordset(["break_hours", "has_open_break",
+                                      "worked_hours"])
+        _logger.info(
+            "Mobile break %s: %s", direction, request.env.user.login
+        )
+        return ok(
+            {
+                "direction": direction,
+                "today": self._today_state(employee),
             }
         )
 
@@ -280,6 +407,50 @@ class MobileAttendance(http.Controller):
                 % (session.id, request.env.user.login, session.check_in),
             )
 
+        # An unfinished break cannot be deducted from the session, so a
+        # check-out on top of one would silently pay for the break. Refused
+        # with the remedy named, rather than accepted and corrected later by
+        # somebody reading a timesheet.
+        if was_checked_in and session.has_open_break:
+            return fail(
+                409,
+                "You are on a break. End the break before checking out, so "
+                "your hours are recorded correctly.",
+                code="break_running",
+                log="check-out during break by %s" % request.env.user.login,
+            )
+
+        # Where they are, when they are starting work. Never checked on the
+        # way out: somebody who has left the site has, if anything, finished
+        # working, and refusing their check-out would leave a session open
+        # that the constraint then blocks tomorrow's check-in with.
+        fence = {"outcome": "allow", "distance_m": None}
+        if not was_checked_in:
+            fence = self._evaluate_location(employee, data)
+            if fence["outcome"] == "refuse":
+                return fail(
+                    403,
+                    "You seem to be about %(distance)s away from %(place)s. "
+                    "If you are working away from there, send this again with "
+                    "a short reason and it will be recorded."
+                    % {
+                        "distance": self._distance_label(fence["distance_m"]),
+                        "place": fence["location_name"],
+                    },
+                    code="off_site",
+                    errors={
+                        "distance_m": fence["distance_m"],
+                        "radius_m": fence["radius_m"],
+                        "location_name": fence["location_name"],
+                        # The client shows a reason field and resends with
+                        # off_site_reason. Named here so the app does not have
+                        # to hard-code the contract.
+                        "requires": "off_site_reason",
+                    },
+                    log="off-site check-in refused for %s at %sm"
+                    % (request.env.user.login, fence["distance_m"]),
+                )
+
         try:
             # Not sudo. The employee's own rights are what should permit this,
             # and hr_attendance already grants a user rights over their own
@@ -308,6 +479,16 @@ class MobileAttendance(http.Controller):
             )
 
         employee.invalidate_recordset(["attendance_state", "last_attendance_id"])
+
+        # Stamped after the fact rather than passed into the punch, because
+        # _attendance_action_change only forwards the geo keys hr.attendance
+        # declares and would raise on an unknown one. The flag is the real
+        # output of the location check -- see models/attendance_geofence.py --
+        # so it has to land on the row whether the punch was allowed outright
+        # or accepted on the strength of a reason.
+        if not was_checked_in and fence["outcome"] in ("flag", "refuse"):
+            self._flag_off_site(employee, fence, data)
+
         _logger.info(
             "Mobile attendance %s: %s",
             "check-out" if was_checked_in else "check-in",

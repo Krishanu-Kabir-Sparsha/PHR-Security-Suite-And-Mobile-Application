@@ -199,7 +199,7 @@ class _TodayCard extends ConsumerWidget {
               // the server is the one that decides whether to accept it.
               onPressed: busy || onLeave || !mayPunch
                   ? null
-                  : () => ref.read(attendanceToggleProvider.notifier).toggle(),
+                  : () => _punch(context, ref),
               icon: busy
                   ? const SizedBox(
                       width: 18,
@@ -218,6 +218,42 @@ class _TodayCard extends ConsumerWidget {
               ),
             ),
           ),
+          // Offered only while a session is open, because a break lives
+          // inside one. Shown for `on_break` too, where it reads End Break.
+          if (today.state.isWorking) ...[
+            const SizedBox(height: AppSpacing.xs),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy
+                    ? null
+                    : () => ref
+                        .read(attendanceToggleProvider.notifier)
+                        .toggleBreak(),
+                icon: Icon(
+                  today.state == AttendanceState.onBreak
+                      ? Icons.play_arrow_outlined
+                      : Icons.pause_outlined,
+                ),
+                label: Text(
+                  today.state == AttendanceState.onBreak
+                      ? 'End Break'
+                      : 'Take a Break',
+                ),
+              ),
+            ),
+          ],
+          if (today.state == AttendanceState.onBreak) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              // Said plainly, because the alternative is somebody checking
+              // out mid-break and finding the button refuses them.
+              'Your break time is deducted from today. End the break before '
+              'you check out.',
+              style: context.text.bodySmall
+                  ?.copyWith(color: palette.inkTertiary),
+            ),
+          ],
           if (!mayPunch) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -237,6 +273,98 @@ class _TodayCard extends ConsumerWidget {
 
   static String _time(DateTime? value) =>
       value == null ? '—' : DateFormat.jm().format(value);
+
+  /// Punch, and if the server says it looks off-site, ask why and send again.
+  ///
+  /// The second attempt is what makes the location rule an accountability
+  /// control rather than a lockout: nobody is ever left unable to start work,
+  /// and every exception carries a reason the employee wrote at the time.
+  static Future<void> _punch(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(attendanceToggleProvider.notifier);
+    final result = await controller.toggle();
+    if (result != null || !context.mounted) return;
+
+    // Keyed on the server's own code, not on the failure type. An off-site
+    // refusal is a 403 and therefore a PermissionFailure; a stale session is
+    // a 409 and a ValidationFailure. Matching on type would have tied this to
+    // an HTTP status the server is free to change.
+    final failure = ref.read(attendanceToggleProvider).error;
+    if (failure is! AppFailure || failure.code != 'off_site') return;
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => _OffSiteReasonDialog(message: failure.userMessage),
+    );
+    if (reason == null || reason.trim().isEmpty || !context.mounted) return;
+    await controller.toggle(offSiteReason: reason.trim());
+  }
+}
+
+/// Asks why somebody is checking in away from their work location.
+///
+/// A free-text field rather than a list of reasons. The list would be wrong
+/// on its first day — site visit, client meeting, delivery, power cut at the
+/// office, working from a cafe because the lift is broken — and an employee
+/// forced to pick the nearest wrong option teaches HR nothing.
+class _OffSiteReasonDialog extends StatefulWidget {
+  const _OffSiteReasonDialog({required this.message});
+
+  final String message;
+
+  @override
+  State<_OffSiteReasonDialog> createState() => _OffSiteReasonDialogState();
+}
+
+class _OffSiteReasonDialogState extends State<_OffSiteReasonDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Working away from your usual place?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.message),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            maxLines: 2,
+            maxLength: 200,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'What are you doing today?',
+              hintText: 'Client visit at Gulshan',
+            ),
+            onSubmitted: (value) => Navigator.of(context).pop(value),
+          ),
+          Text(
+            'Your check-in will be recorded with this note for HR.',
+            style: context.text.bodySmall
+                ?.copyWith(color: context.palette.inkTertiary),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Check in anyway'),
+        ),
+      ],
+    );
+  }
 }
 
 class _StatusPill extends StatelessWidget {

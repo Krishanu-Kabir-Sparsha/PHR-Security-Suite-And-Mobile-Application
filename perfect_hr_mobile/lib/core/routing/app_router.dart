@@ -19,6 +19,7 @@ import '../../features/authentication/presentation/pair_device_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/security_screen.dart';
 import 'nav_profile.dart';
+import '../../features/subscription/presentation/subscription_screen.dart';
 
 /// Application router.
 ///
@@ -387,6 +388,15 @@ List<RouteBase> _nestedRoutesFor(String branchPath) {
           path: 'security',
           name: ScreenIds.security,
           builder: (_, __) => const SecurityScreen(),
+        ),
+        // SET-03. The route exists for everyone; the data behind it does not.
+        // Guarding the route as well as the tile would mean a stale app build
+        // could navigate somewhere it then could not render, so the screen
+        // handles its own 403 and says what happened.
+        GoRoute(
+          path: 'subscription',
+          name: ScreenIds.subscription,
+          builder: (_, __) => const SubscriptionScreen(),
         ),
       ],
     _ => const [],

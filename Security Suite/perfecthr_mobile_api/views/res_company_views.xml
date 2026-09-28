@@ -64,8 +64,53 @@
                             the kiosk or another handset, or if they are on
                             approved leave.
                             <br/>
-                            Checking <b>out</b> is never automatic. Signing out
-                            of the app does not end an attendance record.
+                            Signing out of the app never ends an attendance
+                            record - a phone that lost its session has not told
+                            us the person went home.
+                        </div>
+                        <group>
+                            <field name="auto_check_out"/>
+                            <field name="auto_check_out_tolerance"
+                                   invisible="not auto_check_out"/>
+                        </group>
+                        <div class="text-muted" colspan="2">
+                            <b>Keep this on where people punch on a phone.</b>
+                            A phone goes in a pocket and the check-out is
+                            remembered or it is not - and an unclosed session
+                            makes Odoo refuse <b>every</b> later check-in for
+                            that employee until somebody fixes it by hand. One
+                            forgotten Friday can block the whole of the
+                            following week.
+                            <br/>
+                            Sessions still open past the end of the scheduled
+                            working day, plus the tolerance, are closed
+                            automatically and marked so nobody mistakes them
+                            for a real punch.
+                        </div>
+                    </group>
+                    <group string="Location">
+                        <group>
+                            <field name="attendance_geofence_mode"/>
+                            <field name="attendance_geofence_radius_m"
+                                   invisible="attendance_geofence_mode == 'off'"/>
+                        </group>
+                        <div class="text-muted" colspan="2">
+                            Checks where a mobile check-in was made against the
+                            employee's work location. Set the coordinates under
+                            <b>Employees &gt; Configuration &gt; Work
+                            Locations</b>; a location with none is never
+                            checked.
+                            <br/><br/>
+                            <b>Nothing is ever refused outright.</b> Someone
+                            genuinely working off-site sends the punch again
+                            with a short reason, and it is recorded and flagged
+                            for you rather than lost. Attendance is how people
+                            get paid, so a GPS failure must not become an
+                            unpaid hour - and the flag is reviewable where a
+                            refusal would not be.
+                            <br/>
+                            Find them under Attendances with the
+                            <b>Away From Work Location</b> filter.
                         </div>
                     </group>
                 </page>

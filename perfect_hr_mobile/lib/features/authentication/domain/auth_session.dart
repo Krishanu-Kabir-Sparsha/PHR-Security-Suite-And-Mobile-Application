@@ -194,6 +194,7 @@ SessionUser sessionUserFromJson(Map<String, Object?> json) {
     ),
     tenantId: json['tenant_id'] as String? ?? '',
     tenantName: json['tenant_name'] as String? ?? '',
+    tenantUrl: json['tenant_url'] as String?,
     companyId: '${json['company_id'] ?? ''}',
     companyName: json['company_name'] as String? ?? '',
     companies: ((json['companies'] as List?) ?? const [])
@@ -216,6 +217,7 @@ Map<String, Object?> sessionUserToJson(SessionUser user) => {
       'role': user.role.wireValue,
       'tenant_id': user.tenantId,
       'tenant_name': user.tenantName,
+      'tenant_url': user.tenantUrl,
       'company_id': user.companyId,
       'company_name': user.companyName,
       'companies': [

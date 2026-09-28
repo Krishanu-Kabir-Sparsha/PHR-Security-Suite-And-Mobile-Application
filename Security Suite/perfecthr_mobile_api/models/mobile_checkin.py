@@ -292,9 +292,19 @@ class MobileCheckin(models.AbstractModel):
 
         session = self.open_session(employee)
         stale = self.is_stale(session)
+        break_started = self._break_started_at(session)
 
         if session:
-            state = "checked_in_stale" if stale else "checked_in"
+            if stale:
+                state = "checked_in_stale"
+            elif break_started:
+                # A running break outranks "checked in" because it changes what
+                # the screen must offer: End Break, not Check Out. Checking out
+                # mid-break is refused anyway -- an unfinished break cannot be
+                # deducted -- so offering it would be offering a refusal.
+                state = "on_break"
+            else:
+                state = "checked_in"
         elif records:
             state = "checked_out"
         elif self._on_approved_leave(employee):
@@ -313,8 +323,8 @@ class MobileCheckin(models.AbstractModel):
                 session.check_in if session else None
             ),
             "check_out_at": closed[-1].check_out if closed else None,
-            # Populated by the break feature; null while no break is running.
-            "break_started_at": self._break_started_at(session),
+            # Null while no break is running.
+            "break_started_at": break_started,
             "worked_minutes": worked,
             # When the open row started, so a stale session can name its own
             # date rather than making the reader work it out.

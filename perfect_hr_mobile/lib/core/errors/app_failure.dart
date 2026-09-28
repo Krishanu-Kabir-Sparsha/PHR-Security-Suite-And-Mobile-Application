@@ -11,6 +11,8 @@ sealed class AppFailure implements Exception {
     required this.userMessage,
     this.technical,
     this.isRetryable = true,
+    this.code,
+    this.details = const {},
   });
 
   /// Human-readable, non-technical, safe to render.
@@ -18,6 +20,19 @@ sealed class AppFailure implements Exception {
 
   /// Diagnostic detail for logs/Crashlytics only. Never rendered.
   final String? technical;
+
+  /// The server's machine-readable reason, e.g. `off_site`, `stale_session`.
+  ///
+  /// Every endpoint in this API already sends one, and the client used to
+  /// discard all of them — which meant a refusal the app was supposed to
+  /// *respond* to, by asking a question and retrying, was indistinguishable
+  /// from any other error of the same status. Never rendered; [userMessage]
+  /// is what a person reads.
+  final String? code;
+
+  /// Structured extras the server attached to the refusal, such as the
+  /// distance from a work location. Never rendered directly.
+  final Map<String, Object?> details;
 
   /// Whether offering a "Try Again" action makes sense.
   final bool isRetryable;
@@ -35,6 +50,8 @@ enum FailureUxState { error, offline, permissionDenied, empty }
 /// Device or network connectivity unavailable.
 class OfflineFailure extends AppFailure {
   const OfflineFailure({
+    super.code,
+    super.details,
     super.userMessage =
         "You're offline. Showing your last synchronized data.",
     super.technical,
@@ -48,6 +65,8 @@ class OfflineFailure extends AppFailure {
 /// UI-UX §48 — e.g. attendance check-in must be server-validated.
 class ConnectionRequiredFailure extends AppFailure {
   const ConnectionRequiredFailure({
+    super.code,
+    super.details,
     super.userMessage = 'Connection required to complete this action.',
     super.technical,
   });
@@ -59,6 +78,8 @@ class ConnectionRequiredFailure extends AppFailure {
 /// Request reached the server but timed out or the network dropped.
 class NetworkFailure extends AppFailure {
   const NetworkFailure({
+    super.code,
+    super.details,
     super.userMessage =
         "We couldn't reach Perfect HR just now. Please try again.",
     super.technical,
@@ -93,6 +114,8 @@ class ServerFailure extends AppFailure {
 /// renders the outcome. Never retryable.
 class PermissionFailure extends AppFailure {
   const PermissionFailure({
+    super.code,
+    super.details,
     String userMessage = "You don't have permission to view this information.",
     String? technical,
     this.scope,
@@ -112,6 +135,8 @@ class PermissionFailure extends AppFailure {
 /// Session expired or token refresh failed; the user must re-authenticate.
 class SessionExpiredFailure extends AppFailure {
   const SessionExpiredFailure({
+    super.code,
+    super.details,
     String userMessage = 'Your session has expired. Please sign in again.',
     String? technical,
   }) : super(
@@ -127,6 +152,8 @@ class SessionExpiredFailure extends AppFailure {
 /// Requested resource does not exist or is out of the user's data scope.
 class NotFoundFailure extends AppFailure {
   const NotFoundFailure({
+    super.code,
+    super.details,
     String userMessage = "We couldn't find what you were looking for.",
     String? technical,
   }) : super(
@@ -145,10 +172,14 @@ class ValidationFailure extends AppFailure {
   const ValidationFailure({
     String userMessage = 'Please check the highlighted fields and try again.',
     String? technical,
+    String? code,
+    Map<String, Object?> details = const {},
     this.fieldErrors = const {},
   }) : super(
           userMessage: userMessage,
           technical: technical,
+          code: code,
+          details: details,
           isRetryable: false,
         );
 
@@ -161,6 +192,8 @@ class ValidationFailure extends AppFailure {
 /// Fallback. Anything unmapped must still present a safe message.
 class UnknownFailure extends AppFailure {
   const UnknownFailure({
+    super.code,
+    super.details,
     super.userMessage = 'Something went wrong. Please try again.',
     super.technical,
   });

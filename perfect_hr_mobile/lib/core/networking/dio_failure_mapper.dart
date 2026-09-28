@@ -89,10 +89,42 @@ class DioFailureMapper {
     };
   }
 
+  /// The server's `code`, when it sent one and it looks like a code.
+  ///
+  /// Length-capped and character-checked for the same reason
+  /// [_extractSafeMessage] distrusts the body: this comes from the network,
+  /// and a value that reached a switch statement unchecked is a value that
+  /// can steer the client.
+  static String? _extractCode(Response<dynamic>? response) {
+    final body = response?.data;
+    if (body is! Map) return null;
+    final raw = body['code'];
+    if (raw is! String) return null;
+    final code = raw.trim();
+    if (code.isEmpty || code.length > 64) return null;
+    return RegExp(r'^[a-z0-9_]+$').hasMatch(code) ? code : null;
+  }
+
+  /// The `errors` block, when the server attached structured detail.
+  static Map<String, Object?> _extractDetails(Response<dynamic>? response) {
+    final body = response?.data;
+    if (body is! Map) return const {};
+    final errors = body['errors'];
+    if (errors is! Map) return const {};
+    return errors.map((key, value) => MapEntry('$key', value as Object?));
+  }
+
   AppFailure _mapResponse(DioException error, String technical) {
     final response = error.response;
     final status = response?.statusCode ?? 0;
     final safeMessage = _extractSafeMessage(response);
+    // The server's machine-readable reason, carried through so the app can
+    // respond to a specific refusal rather than only describe it. `off_site`
+    // is answered with a reason prompt and a retry; `stale_session` with an
+    // offer to close the forgotten one. Discarding these made both of those
+    // impossible to tell from any other error of the same status.
+    final code = _extractCode(response);
+    final details = _extractDetails(response);
 
     return switch (status) {
       // Malformed request. Surface field errors where the server supplied them.
@@ -100,18 +132,22 @@ class DioFailureMapper {
           userMessage: safeMessage ??
               'Please check the information you entered and try again.',
           technical: technical,
+          code: code,
+          details: details,
           fieldErrors: _extractFieldErrors(response),
         ),
 
       // Token missing, expired or rejected. Task 3's refresh interceptor gets
       // first attempt; reaching here means re-authentication is required.
-      401 => SessionExpiredFailure(technical: technical),
+      401 => SessionExpiredFailure(technical: technical, code: code),
 
       // Authorisation denied server-side. Never retryable.
       403 => PermissionFailure(
           userMessage: safeMessage ??
               "You don't have permission to view this information.",
           technical: technical,
+          code: code,
+          details: details,
         ),
 
       // The safe message matters more here than anywhere else. A 404 from this
@@ -124,6 +160,8 @@ class DioFailureMapper {
           userMessage:
               safeMessage ?? "We couldn't find what you were looking for.",
           technical: technical,
+          code: code,
+          details: details,
         ),
 
       // Workflow conflict, e.g. already checked in, or approving a request
@@ -132,12 +170,16 @@ class DioFailureMapper {
           userMessage: safeMessage ??
               'This has already been updated. Please refresh and try again.',
           technical: technical,
+          code: code,
+          details: details,
         ),
 
       422 => ValidationFailure(
           userMessage: safeMessage ??
               'Please check the highlighted fields and try again.',
           technical: technical,
+          code: code,
+          details: details,
           fieldErrors: _extractFieldErrors(response),
         ),
 

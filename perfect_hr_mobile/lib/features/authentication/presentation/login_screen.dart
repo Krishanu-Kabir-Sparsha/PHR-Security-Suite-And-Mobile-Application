@@ -122,7 +122,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// somewhere else" path. An ordinary sign-out keeps the address, because it
   /// is not a credential and retyping it every morning would be a worse app.
   Future<void> _changeWorkspace() async {
-    await ref.read(tenantControllerProvider.notifier).forget();
+    // Not tenantController.forget() directly: leaving a workspace has to
+    // revoke the token at that workspace and wipe its device key first, and
+    // all of that must happen while the app is still pointed at it.
+    await ref.read(signInControllerProvider.notifier).leaveWorkspace();
     if (!mounted) return;
     setState(() {
       _step = _Step.workspace;

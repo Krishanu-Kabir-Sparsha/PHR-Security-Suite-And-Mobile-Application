@@ -249,30 +249,14 @@ class MobileAuth(http.Controller):
 
         The app shows who somebody is before it shows what they may do, and
         "Senior Officer, Finance, reporting to X" is what makes a role legible
-        to the person holding it. Every field is nullable: a new joiner with a
-        half-filled record must still get a working session.
+        to the person holding it.
+
+        Built by ``perfecthr.mobile.employment`` rather than here. This used to
+        assemble its own dictionary, and ``/me/capabilities`` assembled a
+        different one -- so the Status and Joined rows appeared at sign-in and
+        then vanished the first time the app refreshed in the foreground.
         """
-        if not employee:
-            return None
-        contract = getattr(employee, "contract_id", False)
-        return {
-            "employee_code": employee.identification_id or None,
-            "job_title": employee.job_title or (employee.job_id.name or None),
-            "job_position": employee.job_id.name or None,
-            "department": employee.department_id.name or None,
-            "manager": employee.parent_id.name or None,
-            "work_location": employee.work_location_id.name or None,
-            "shift": employee.resource_calendar_id.name or None,
-            "work_email": employee.work_email or None,
-            "work_phone": employee.work_phone or None,
-            # Employment standing, from the contract when hr_contract is
-            # installed. Absent rather than guessed: "active" asserted about
-            # somebody whose contract ended is a worse answer than nothing.
-            "employment_status": (contract.state if contract else None),
-            "joined_on": str(employee.create_date.date())
-            if employee.create_date
-            else None,
-        }
+        return request.env["perfecthr.mobile.employment"].card(employee)
 
     def _session_user(self, user, company=None, employee=None):
         """The SessionUser payload the client expects on sign-in."""
@@ -297,6 +281,18 @@ class MobileAuth(http.Controller):
             # several of the latter.
             "tenant_id": request.db or request.httprequest.host.split(":")[0],
             "tenant_name": request.env["res.company"].sudo().browse(1).name,
+            # The workspace's own address, as the server knows it.
+            #
+            # Not the host the app happened to dial: those differ whenever a
+            # tenant is reached through an alias or an IP during setup, and the
+            # app needs the canonical one to show in Settings and to hand to
+            # anyone asked "which workspace are you on?". web.base.url is
+            # frozen at provisioning precisely so it stays the canonical answer.
+            "tenant_url": request.env["ir.config_parameter"]
+            .sudo()
+            .get_param("web.base.url", "")
+            .rstrip("/")
+            or None,
             "company_id": str(company.id),
             "company_name": company.name,
             # Every company this person may switch to without signing out

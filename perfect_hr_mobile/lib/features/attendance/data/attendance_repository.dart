@@ -18,7 +18,16 @@ abstract interface class AttendanceRepository {
   Future<AttendanceToggleResult> toggle({
     double? latitude,
     double? longitude,
+    double? accuracyMetres,
+    String? offSiteReason,
   });
+
+  /// Start the break if none is running, end it if one is.
+  ///
+  /// A toggle for the same reason the check-in is: the phone may have been
+  /// offline while the break ended elsewhere, and a client that picks the
+  /// direction eventually picks the wrong one.
+  Future<AttendanceToggleResult> toggleBreak({String? breakType});
 
   /// Close a session left open on an earlier day.
   ///
@@ -90,16 +99,39 @@ class ApiAttendanceRepository implements AttendanceRepository {
   Future<AttendanceToggleResult> toggle({
     double? latitude,
     double? longitude,
+    double? accuracyMetres,
+    String? offSiteReason,
   }) async {
     final json = await _client.post<Map<String, dynamic>>(
       '$path/toggle',
       data: <String, Object?>{
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
+        // The phone's own margin of error. The server subtracts it before
+        // deciding anybody is out of range, so a poor fix counts in the
+        // employee's favour rather than against them.
+        if (accuracyMetres != null) 'accuracy_m': accuracyMetres,
+        // Present only on the second attempt, after the server said the punch
+        // looked far from work and the user explained why. Its presence is
+        // what turns a refusal into a flagged acceptance.
+        if (offSiteReason != null && offSiteReason.isNotEmpty)
+          'off_site_reason': offSiteReason,
       },
     );
     // The cached overview is wrong the instant this succeeds, and this screen
     // is the one place where showing a stale state is actively harmful.
+    await _resource.invalidate();
+    return AttendanceToggleResult.fromJson(json);
+  }
+
+  @override
+  Future<AttendanceToggleResult> toggleBreak({String? breakType}) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '$path/break',
+      data: <String, Object?>{
+        if (breakType != null) 'break_type': breakType,
+      },
+    );
     await _resource.invalidate();
     return AttendanceToggleResult.fromJson(json);
   }
@@ -182,6 +214,8 @@ class MockAttendanceRepository implements AttendanceRepository {
   Future<AttendanceToggleResult> toggle({
     double? latitude,
     double? longitude,
+    double? accuracyMetres,
+    String? offSiteReason,
   }) async {
     await Future<void>.delayed(latency);
     final failure = failWith;
@@ -203,6 +237,15 @@ class MockAttendanceRepository implements AttendanceRepository {
       workplaceLabel: _overview.workplaceLabel,
     );
     return AttendanceToggleResult(checkedIn: !wasIn, today: today);
+  }
+
+  @override
+  Future<AttendanceToggleResult> toggleBreak({String? breakType}) async {
+    await Future<void>.delayed(latency);
+    return AttendanceToggleResult(
+      checkedIn: _overview.today.state.isWorking,
+      today: _overview.today,
+    );
   }
 
   @override

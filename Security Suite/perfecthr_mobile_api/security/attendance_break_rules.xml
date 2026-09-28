@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!--
+        The ACL grants every internal user read on hr.attendance.break so the
+        app can show them their own break times. On its own that would also
+        let them read everybody else's, which is a record of when each of
+        their colleagues stopped working and for how long. The rule below
+        scopes it to the owner.
+
+        HR officers get the whole table through the second rule, because
+        correcting a mistyped break is their job and a break they cannot see
+        is one they cannot fix.
+
+        Deliberately mirrors the structure of mobile_token_rules.xml: two
+        non-global rules, OR'd for anyone holding both groups.
+    -->
+    <record id="rule_attendance_break_own" model="ir.rule">
+        <field name="name">Attendance break: own breaks only</field>
+        <field name="model_id" ref="model_hr_attendance_break"/>
+        <field name="domain_force">[('employee_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_attendance_break_officer" model="ir.rule">
+        <field name="name">Attendance break: HR sees all</field>
+        <field name="model_id" ref="model_hr_attendance_break"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr.group_hr_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+</odoo>

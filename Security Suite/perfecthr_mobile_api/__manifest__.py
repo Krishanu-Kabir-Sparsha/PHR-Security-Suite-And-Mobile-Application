@@ -36,7 +36,20 @@
     #   * a session left open on an earlier day is its own state rather than a
     #     raw constraint error after the fact, with /me/attendance/resolve-stale
     #     to close it at the end of the day it belongs to.
-    "version": "18.0.1.13.0",
+    # 18.0.1.14.0 - breaks, the location check, and automatic check-out.
+    #   * hr.attendance.break records a break INSIDE a session instead of
+    #     faking one with a check-out/check-in pair. worked_hours deducts the
+    #     recorded breaks INSTEAD OF the scheduled lunch, never both - Odoo
+    #     already subtracts the calendar lunch, so doing both charges the same
+    #     hour twice.
+    #   * a mobile check-in far from the employee's work location is refused,
+    #     then accepted with a written reason and flagged off_site for HR.
+    #     Never refused outright: attendance is how people get paid, so a GPS
+    #     failure must not become an unpaid hour. Off by default.
+    #   * the migration turns on Odoo's own auto_check_out for companies using
+    #     mobile attendance. Left off, one forgotten check-out blocks every
+    #     later check-in at the overlap constraint.
+    "version": "18.0.1.15.0",
     "category": "Human Resources",
     "license": "AGPL-3",
     "author": "Internal Security Programme",
@@ -62,8 +75,10 @@
     "data": [
         "security/ir.model.access.csv",
         "security/mobile_token_rules.xml",
+        "security/attendance_break_rules.xml",
         "data/ir_cron.xml",
         "views/res_company_views.xml",
+        "views/attendance_views.xml",
         "views/mobile_menus.xml",
     ],
     "installable": True,

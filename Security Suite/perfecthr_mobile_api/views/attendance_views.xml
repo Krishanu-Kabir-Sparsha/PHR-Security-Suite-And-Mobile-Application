@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        Breaks and off-site punches on the attendance form.
+
+        Both are added to the form HR already uses rather than to a screen of
+        their own. An off-site punch that HR has to go and look for is one
+        nobody looks for; sitting on the record it belongs to, it is in front
+        of whoever opens that attendance for any reason.
+    -->
+    <record id="view_attendance_form_breaks" model="ir.ui.view">
+        <field name="name">hr.attendance.form.breaks</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <group string="Breaks" name="breaks">
+                    <field name="break_hours" readonly="1"/>
+                    <field name="has_open_break" invisible="1"/>
+                    <div class="text-muted" colspan="2">
+                        Recorded breaks are deducted from Worked Hours.
+                        <b>The scheduled lunch is not deducted as well</b> when
+                        breaks are recorded, because charging both would take
+                        the same hour twice.
+                    </div>
+                    <field name="break_ids" nolabel="1" colspan="2">
+                        <list editable="bottom">
+                            <field name="break_start"/>
+                            <field name="break_end"/>
+                            <field name="break_type"/>
+                            <field name="duration_hours" sum="Total"
+                                   readonly="1"/>
+                            <field name="source" readonly="1"/>
+                        </list>
+                    </field>
+                </group>
+                <group string="Location" name="off_site"
+                       invisible="not off_site">
+                    <field name="off_site" readonly="1"/>
+                    <field name="off_site_distance_m" readonly="1"/>
+                    <field name="off_site_reason" readonly="1"/>
+                    <div class="text-muted" colspan="2">
+                        This check-in was made away from the employee's work
+                        location and accepted on the strength of the reason
+                        above. Nothing is refused outright - attendance is how
+                        people get paid - so this flag, not a refusal, is what
+                        the location check is for.
+                    </div>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!--
+        A filter so "show me every off-site punch this month" is one click.
+        Without it the flag is data nobody queries.
+    -->
+    <record id="view_attendance_filter_off_site" model="ir.ui.view">
+        <field name="name">hr.attendance.search.off.site</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <filter name="filter_off_site"
+                        string="Away From Work Location"
+                        domain="[('off_site', '=', True)]"/>
+                <filter name="filter_with_breaks"
+                        string="With Recorded Breaks"
+                        domain="[('break_hours', '&gt;', 0)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!--
+        Geofence coordinates on the work location.
+
+        Radius defaults generously on purpose: a GPS fix indoors drifts by
+        tens of metres, and a tight radius refuses people sitting at their own
+        desk. The failure mode of too-large is a punch from the car park; of
+        too-small, an employee who cannot start work.
+    -->
+    <record id="view_work_location_form_geofence" model="ir.ui.view">
+        <field name="name">hr.work.location.form.geofence</field>
+        <field name="model">hr.work.location</field>
+        <field name="inherit_id" ref="hr.hr_work_location_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet//group" position="after">
+                <group string="Mobile Location Check" name="geofence">
+                    <field name="geofence_ready" readonly="1"/>
+                    <field name="geofence_latitude"/>
+                    <field name="geofence_longitude"/>
+                    <field name="geofence_radius_m"/>
+                    <div class="text-muted" colspan="2">
+                        Leave the coordinates empty to use the work address's
+                        own, if it has been placed on a map.
+                        <br/>
+                        <b>With no coordinates at all, nothing is checked</b>
+                        for this location - a place that has not been located
+                        cannot say whether anybody is near it, and guessing
+                        would refuse real people over a configuration gap.
+                    </div>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -92,8 +92,8 @@ class _StubAuthRepository implements AuthRepository {
   }
 }
 
-SessionUser _user() {
-  return const SessionUser(
+SessionUser _user({Employment? employment}) {
+  return SessionUser(
     employeeId: '42',
     displayName: 'Krishanu Kabir',
     role: UserRole.superAdmin,
@@ -101,12 +101,15 @@ SessionUser _user() {
     tenantName: 'Perfect HR',
     jobTitle: 'Platform Administrator',
     permissions: PermissionSet.empty,
+    employment: employment,
   );
 }
 
 ProviderContainer _container(
   _StubAuthRepository repository, {
   AppCapabilities? capabilities,
+  bool admin = false,
+  Employment? employment,
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -115,13 +118,18 @@ ProviderContainer _container(
       capabilitiesRepositoryProvider.overrideWithValue(
         MockCapabilitiesRepository(
           capabilities: capabilities ??
-              const AppCapabilities(
+              AppCapabilities(
                 // One built (securityKeys), one the server offers but the app
                 // has not caught up with (requests), and everything else
                 // absent — so all three groups have something in them.
-                features: {AppFeature.securityKeys, AppFeature.requests},
+                features: const {AppFeature.securityKeys, AppFeature.requests},
                 hasEmployeeRecord: true,
-                hrModulesInstalled: ['hr', 'hr_attendance'],
+                // An ordinary employee by default. The server sends neither
+                // the module list nor the flag to anyone else, so the stub
+                // only carries them when `admin` is asked for.
+                isWorkspaceAdmin: admin,
+                hrModulesInstalled:
+                    admin ? const ['hr', 'hr_attendance'] : const [],
               ),
         ),
       ),
@@ -133,7 +141,9 @@ ProviderContainer _container(
       ),
     ],
   );
-  container.read(sessionControllerProvider.notifier).establish(_user());
+  container
+      .read(sessionControllerProvider.notifier)
+      .establish(_user(employment: employment));
   return container;
 }
 
@@ -263,6 +273,74 @@ void main() {
     });
   });
 
+  group('employment', () {
+    testWidgets('shows position, standing and how long they have been here',
+        (tester) async {
+      // Who somebody IS, as distinct from what they may do. A role list reads
+      // as jargon until it sits beside a job title and a department.
+      final container = _container(
+        _StubAuthRepository(),
+        employment: const Employment(
+          employeeCode: 'EMP-00421',
+          jobPosition: 'Senior Officer',
+          department: 'Finance',
+          employeeType: 'Permanent',
+          joinedOn: '2019-03-01',
+          statusLabel: 'Active',
+        ),
+      );
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.text('EMP-00421'), findsOneWidget);
+      expect(find.text('Senior Officer'), findsOneWidget);
+      expect(find.text('Permanent'), findsOneWidget);
+      expect(find.text('Active'), findsOneWidget);
+      // Formatted, not echoed back as an ISO string.
+      expect(find.text('March 1, 2019'), findsOneWidget);
+    });
+
+    testWidgets('no joining date is a missing row, never a guess',
+        (tester) async {
+      // THE regression guard. This used to be filled from the date the
+      // employee RECORD was created, so every employee of a company that
+      // migrated into Perfect HR read as having joined on the migration date.
+      // Tenure drives leave accrual, probation and gratuity.
+      final container = _container(
+        _StubAuthRepository(),
+        employment: const Employment(
+          employeeCode: 'EMP-00421',
+          jobPosition: 'Senior Officer',
+        ),
+      );
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.text('Joined'), findsNothing);
+    });
+
+    testWidgets('a promotion shows up without signing out', (tester) async {
+      // The session payload is a snapshot of one moment and sessions last
+      // thirty days. Capabilities are re-read on every foreground refresh, so
+      // the fresher copy has to win -- otherwise somebody promoted in January
+      // goes on reading their old job title until they sign out.
+      final container = _container(
+        _StubAuthRepository(),
+        employment: const Employment(jobPosition: 'Officer'),
+        capabilities: const AppCapabilities(
+          features: {AppFeature.securityKeys},
+          hasEmployeeRecord: true,
+          employment: Employment(jobPosition: 'Senior Officer'),
+        ),
+      );
+      addTearDown(container.dispose);
+      await _pump(tester, container);
+
+      expect(find.text('Senior Officer'), findsOneWidget);
+      expect(find.text('Officer'), findsNothing);
+    });
+  });
+
   group('about', () {
     testWidgets('names the workspace the app is talking to', (tester) async {
       final container = _container(_StubAuthRepository());
@@ -276,10 +354,29 @@ void main() {
           );
       await _pump(tester, container);
 
-      // Both, because either alone is ambiguous on a multi-tenant product:
-      // the name is what a person recognises, the host is what they would
-      // read out to support.
+      // The workspace NAME is what a person recognises and is shown to
+      // everyone. The host is a deployment fact and now sits behind the
+      // administrator gate, so an ordinary employee must not see it.
       expect(find.text('Acme Ltd'), findsWidgets);
+      expect(find.text('acme.perfecthr.net'), findsNothing);
+    });
+
+    testWidgets('an administrator also gets the address', (tester) async {
+      // The other side of the same gate. Withholding this from the person
+      // rolling the app out would cost them the fastest way to confirm which
+      // workspace a handset is actually pointed at.
+      final container = _container(_StubAuthRepository(), admin: true);
+      addTearDown(container.dispose);
+      container.read(tenantControllerProvider.notifier).adopt(
+            const TenantConfig(
+              baseUrl: 'https://acme.perfecthr.net',
+              tenantId: 'acme.perfecthr.net',
+              tenantName: 'Acme Ltd',
+            ),
+          );
+      await _pump(tester, container);
+
+      expect(find.text('Technical details'), findsOneWidget);
       expect(find.text('acme.perfecthr.net'), findsOneWidget);
     });
 
@@ -290,11 +387,17 @@ void main() {
       addTearDown(container.dispose);
       await _pump(tester, container);
 
-      expect(find.text('Live from your account'), findsOneWidget);
+      // Live is the unremarkable case and is no longer stated: a row that is
+      // always there is one nobody reads, which is precisely what made the
+      // sample-data warning easy to miss.
+      expect(find.text('Sample data (development)'), findsNothing);
 
       container.read(dataSourceModeProvider.notifier).useMocks();
       await tester.pumpAndSettle();
 
+      // Shown to EVERYONE, admin or not. A real session quietly sitting on
+      // fabricated figures is the one thing on this screen that could lead
+      // somebody to act on a number that is not real.
       expect(find.text('Sample data (development)'), findsOneWidget);
     });
   });
@@ -310,22 +413,46 @@ void main() {
       await _pump(tester, container);
 
       expect(find.text('Ready to use'), findsOneWidget);
-      expect(find.text('On your server, coming to the app'), findsOneWidget);
-      expect(find.text('Not installed on your server'), findsOneWidget);
+      expect(
+        find.text('Your company has these, coming to the app soon'),
+        findsOneWidget,
+      );
+      expect(find.text('Not part of your workspace'), findsOneWidget);
 
       // Reported by the server, but no screen for it yet.
       expect(find.text('Requests'), findsOneWidget);
-      // Not reported, so it is named with the module that would provide it
-      // rather than being silently omitted.
-      expect(find.textContaining('needs ohrms_loan'), findsOneWidget);
+      // Still listed, so nothing is silently omitted -- but named as the
+      // feature, not as the Odoo module behind it. "needs ohrms_loan" sent an
+      // employee looking in a backend they cannot open for something they
+      // cannot install.
+      expect(find.text('Loans'), findsOneWidget);
+      expect(find.textContaining('ohrms_loan'), findsNothing);
     });
 
-    testWidgets('lists the HR modules the server actually runs',
+    testWidgets('an administrator sees which module is missing',
         (tester) async {
-      final container = _container(_StubAuthRepository());
+      // The gate again. For the person who can actually install it, the
+      // module name is the single most useful thing on the row.
+      final container = _container(_StubAuthRepository(), admin: true);
       addTearDown(container.dispose);
       await _pump(tester, container);
 
+      expect(find.textContaining('needs ohrms_loan'), findsOneWidget);
+    });
+
+    testWidgets('lists the HR modules for an administrator only',
+        (tester) async {
+      // Withheld by the SERVER for everyone else, not merely hidden here --
+      // a payload that reaches the handset is in logs, in crash reports and
+      // in whatever a proxy kept. This asserts the app half of that contract.
+      final ordinary = _container(_StubAuthRepository());
+      addTearDown(ordinary.dispose);
+      await _pump(tester, ordinary);
+      expect(find.text('hr, hr_attendance'), findsNothing);
+
+      final admin = _container(_StubAuthRepository(), admin: true);
+      addTearDown(admin.dispose);
+      await _pump(tester, admin);
       expect(find.text('hr, hr_attendance'), findsOneWidget);
     });
 
@@ -343,7 +470,7 @@ void main() {
       await _pump(tester, container);
 
       expect(
-        find.textContaining('not linked to an employee record'),
+        find.textContaining('not linked to your employee file'),
         findsOneWidget,
       );
     });
@@ -360,7 +487,7 @@ void main() {
       await _pump(tester, container);
 
       expect(
-        find.textContaining("couldn't read your server's module list"),
+        find.textContaining("couldn't check what your workspace includes"),
         findsOneWidget,
       );
     });

@@ -16,6 +16,7 @@ class SessionUser {
     required this.role,
     required this.tenantId,
     required this.tenantName,
+    this.tenantUrl,
     this.companyId = '',
     this.companyName = '',
     this.companies = const [],
@@ -36,6 +37,14 @@ class SessionUser {
   /// must never assert or alter tenant context.
   final String tenantId;
   final String tenantName;
+
+  /// The workspace's canonical address, as the SERVER knows it.
+  ///
+  /// Not the host the app happened to dial. Those differ whenever a tenant is
+  /// reached through an alias or a bare IP during setup, and this is the one
+  /// somebody should read out when asked which workspace they are on. Null
+  /// against a server that predates the field.
+  final String? tenantUrl;
 
   /// The company *inside* that workspace this session is operating in.
   ///
@@ -96,6 +105,13 @@ class Employment {
     this.workLocation,
     this.shift,
     this.status,
+    this.statusLabel,
+    this.employeeType,
+    this.joinedOn,
+    this.contractEnd,
+    this.workEmail,
+    this.workPhone,
+    this.company,
   });
 
   /// The Employee ID / badge number — the same value the fingerprint terminals
@@ -114,6 +130,34 @@ class Employment {
   /// saying nothing.
   final String? status;
 
+  /// The same state in the words an employee would use. Rendered as-is: the
+  /// server owns this wording so the phone and the web never disagree about
+  /// what a contract state means.
+  final String? statusLabel;
+
+  /// Permanent, contractor, intern. A different question from whether the
+  /// contract is currently running.
+  final String? employeeType;
+
+  /// When this person started, from their contract record.
+  ///
+  /// Null where it cannot be established. It used to be derived from the
+  /// employee record's creation date, which for any company that migrated
+  /// into Perfect HR was the migration date, so everyone -- including people
+  /// with decades of service -- read as a new joiner. Tenure drives leave
+  /// accrual, probation and gratuity, so a blank is the honest answer.
+  final String? joinedOn;
+
+  /// When the current contract runs out. Open-ended contracts have none.
+  final String? contractEnd;
+
+  final String? workEmail;
+  final String? workPhone;
+
+  /// The company this employment belongs to, which in a multi-company tenant
+  /// is not necessarily the company the session is operating in.
+  final String? company;
+
   bool get isEmpty =>
       employeeCode == null &&
       jobPosition == null &&
@@ -130,6 +174,13 @@ class Employment {
         workLocation: json['work_location'] as String?,
         shift: json['shift'] as String?,
         status: json['employment_status'] as String?,
+        statusLabel: json['employment_status_label'] as String?,
+        employeeType: json['employee_type'] as String?,
+        joinedOn: json['joined_on'] as String?,
+        contractEnd: json['contract_end'] as String?,
+        workEmail: json['work_email'] as String?,
+        workPhone: json['work_phone'] as String?,
+        company: json['company'] as String?,
       );
 
   Map<String, Object?> toJson() => {
@@ -141,6 +192,13 @@ class Employment {
         'work_location': workLocation,
         'shift': shift,
         'employment_status': status,
+        'employment_status_label': statusLabel,
+        'employee_type': employeeType,
+        'joined_on': joinedOn,
+        'contract_end': contractEnd,
+        'work_email': workEmail,
+        'work_phone': workPhone,
+        'company': company,
       };
 }
 

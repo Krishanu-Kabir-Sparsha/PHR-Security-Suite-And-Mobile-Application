@@ -248,3 +248,42 @@ class ResUsersMobilePolicy(models.Model):
         if self._mobile_requires_advance():
             return [AUTH_MODE_ADVANCE]
         return modes
+
+    # ------------------------------------------------------------------
+    # Commercial visibility
+    # ------------------------------------------------------------------
+    # Groups that may read the workspace's own plan, price and quotas.
+    #
+    # Deliberately a short list. What a company pays for Perfect HR, when the
+    # plan renews and how close it is to its seat limit are facts about the
+    # employer's commercial relationship with its vendor -- not about the
+    # employee. An ordinary member of staff opening Settings should see their
+    # own job, not their employer's invoice.
+    #
+    # The in-tenant web dashboard (saas_tenant_dashboard) grants
+    # base.group_user, so this is narrower than the web on purpose: a phone is
+    # far likelier than a desktop to be read over somebody's shoulder.
+    _SUBSCRIPTION_GROUPS = (
+        "base.group_system",
+        "sec_plaza_rbac.group_security_super_admin",
+        "sec_plaza_rbac.group_plaza_admin",
+        "hr.group_hr_manager",
+    )
+
+    def _may_view_subscription(self):
+        """True when this user may see the plan, its price and its quotas.
+
+        Tolerant of an absent group for the same reason ``_has_group`` in the
+        capabilities controller is: ``sec_plaza_rbac`` or ``hr`` may be missing
+        or mid-upgrade, and the honest answer for a group that does not exist
+        here is "no" rather than a 500 that takes the Settings screen with it.
+        """
+        self.ensure_one()
+        user = self.sudo()
+        for xmlid in self._SUBSCRIPTION_GROUPS:
+            try:
+                if user.has_group(xmlid):
+                    return True
+            except ValueError:
+                continue
+        return False
