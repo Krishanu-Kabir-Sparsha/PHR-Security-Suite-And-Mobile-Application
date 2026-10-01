@@ -319,12 +319,19 @@ class _SignInAttendanceNotice extends ConsumerWidget {
 
     final palette = context.palette;
     final good = attendance.wasRecorded;
+    // Amber, not the neutral blue the other explanations get. This one costs
+    // paid time if it is dismissed unread.
+    final urgent = attendance.needsAction;
     final at = attendance.checkInAt;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Material(
-        color: good ? palette.successContainer : palette.infoContainer,
+        color: good
+            ? palette.successContainer
+            : urgent
+                ? palette.warningContainer
+                : palette.infoContainer,
         borderRadius: AppRadius.cardRadius,
         child: InkWell(
           borderRadius: AppRadius.cardRadius,
@@ -336,7 +343,11 @@ class _SignInAttendanceNotice extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  good ? Icons.how_to_reg_outlined : Icons.info_outline,
+                  good
+                      ? Icons.how_to_reg_outlined
+                      : urgent
+                          ? Icons.location_off_outlined
+                          : Icons.info_outline,
                   color: good
                       ? palette.onSuccessContainer
                       : palette.onInfoContainer,

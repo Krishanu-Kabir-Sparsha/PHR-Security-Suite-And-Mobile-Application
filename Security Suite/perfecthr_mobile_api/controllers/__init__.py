@@ -5,6 +5,7 @@ from . import me
 from . import authenticators
 from . import capabilities
 from . import subscription
+from . import work_location
 from . import attendance
 from . import leave
 from . import approvals

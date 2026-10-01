@@ -25,7 +25,18 @@ class SignInAttendance {
   /// True when a person might reasonably wonder why nothing happened. Drives
   /// whether the home screen bothers explaining itself.
   bool get isWorthExplaining =>
-      status == 'on_leave' || status == 'no_employee' || status == 'skipped';
+      status == 'on_leave' ||
+      status == 'no_employee' ||
+      status == 'skipped' ||
+      needsAction;
+
+  /// The sign-in worked but the check-in did not, and the person has to do
+  /// something about it.
+  ///
+  /// Its own flag rather than another entry in [isWorthExplaining] because it
+  /// is the only status here that costs somebody paid time if they walk away
+  /// without reading it. The home screen colours it accordingly.
+  bool get needsAction => status == 'off_site';
 
   /// Copy for each outcome, written here so one place decides the wording.
   String get describe => switch (status) {
@@ -39,6 +50,12 @@ class SignInAttendance {
             'attendance could not be recorded. Please ask HR.',
         'skipped' => 'Attendance could not be recorded automatically. You can '
             'check in from the Attendance screen.',
+        // A fallback only. The server sends its own sentence for this one,
+        // because the remedy differs: turn location on, move somewhere with a
+        // clearer signal, or ask a manager.
+        'off_site' => 'You were not checked in, because Perfect HR could not '
+            'confirm you are at work. Open Attendance to try again or to ask '
+            'your manager.',
         _ => '',
       };
 

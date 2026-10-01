@@ -47,6 +47,7 @@ import logging
 import math
 
 from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -63,6 +64,24 @@ DEFAULT_RADIUS_M = 250
 # of it would punish somebody for their phone's uncertainty, so a low-accuracy
 # fix is treated as no fix at all and the punch is allowed.
 MAX_TRUSTED_ACCURACY_M = 500
+
+
+def _distance_label(metres):
+    """A distance a person can picture, rather than a bare number.
+
+    Rounded to ten metres below a kilometre: a GPS fix is not accurate enough
+    to justify "487 metres", and quoting it that precisely invites an argument
+    about seven metres that the hardware cannot settle.
+
+    Defined here rather than in the controller because the refusal message is
+    now raised by the model, and two copies of this would eventually round
+    differently in the app and in the backend.
+    """
+    if not metres:
+        return _("some distance")
+    if metres < 1000:
+        return _("%s metres") % int(round(metres / 10.0) * 10)
+    return _("%.1f km") % (metres / 1000.0)
 
 
 def haversine_metres(lat1, lon1, lat2, lon2):
@@ -130,6 +149,36 @@ class HrWorkLocationGeofence(models.Model):
         return None, None
 
 
+class HrEmployeeGeofence(models.Model):
+    _inherit = "hr.employee"
+
+    attendance_location_ids = fields.Many2many(
+        "hr.work.location",
+        "hr_employee_attendance_location_rel",
+        "employee_id",
+        "location_id",
+        string="Other Places They May Check In",
+        help="Sites besides their main work location where a check-in is "
+        "accepted. A punch passes if it is within range of ANY of them.\n\n"
+        "Somebody at head office Monday to Wednesday and at a branch Thursday "
+        "to Friday needs the branch listed here. Without it they are refused "
+        "two days a week for doing exactly what they were asked to do.",
+    )
+
+    def _geofence_locations(self):
+        """Every place this employee may legitimately punch from.
+
+        The main work location comes first, so that when several are in range
+        it is the one on their record that gets named back to them -- which is
+        the answer a person expects to read.
+
+        Locations with no coordinates are dropped rather than treated as a
+        failure: an unplaced site is a configuration gap, and gaps must not
+        refuse anybody.
+        """
+        self.ensure_one()
+        locations = self.work_location_id | self.attendance_location_ids
+        return locations.filtered(lambda loc: loc.geofence_ready)
 class ResCompanyGeofence(models.Model):
     _inherit = "res.company"
 
@@ -137,17 +186,24 @@ class ResCompanyGeofence(models.Model):
         selection=[
             ("off", "Off - location is recorded but never checked"),
             ("warn", "Warn - allow, and flag punches made away from work"),
-            ("enforce", "Enforce - refuse unless a reason is given"),
+            ("enforce", "Enforce - no check-in unless they are on site"),
         ],
-        string="Mobile Location Check",
+        string="Location Check",
         default="off",
         required=True,
-        help="What to do when a mobile check-in comes from away from the "
-        "employee's work location.\n\n"
-        "Nothing is ever refused outright: an employee who really is off-site "
-        "can send the punch again with a reason, and it is accepted and "
-        "flagged for review. Attendance is how people get paid, so a GPS "
-        "failure must not become an unpaid hour.\n\n"
+        help="What to do when a check-in comes from away from every one of "
+        "the employee's work locations.\n\n"
+        "WARN flags the punch and lets it through.\n\n"
+        "ENFORCE refuses it, on every route into attendance - the app, the "
+        "web dashboard and the backend widget alike. A device reporting no "
+        "usable position is refused too, because otherwise declining the "
+        "location permission would itself be the way around the rule. "
+        "Somebody genuinely off-site asks their manager to approve the punch, "
+        "and it is recorded at the time they asked rather than the time it "
+        "was approved.\n\n"
+        "Enforce is strict by design and WILL stop people working if the "
+        "coordinates are wrong. Set each location from the site itself, and "
+        "run on WARN for a week before switching it on.\n\n"
         "Off by default, so upgrading changes nobody's behaviour.",
     )
     attendance_geofence_radius_m = fields.Integer(
@@ -179,6 +235,120 @@ class HrAttendanceGeofence(models.Model):
         aggregator=None,
     )
 
+    # ------------------------------------------------------------------
+    # The gate
+    # ------------------------------------------------------------------
+    # Enforcement lives HERE, on the model, and not in the controllers.
+    #
+    # It used to live in one controller -- the mobile toggle -- which left
+    # three other ways into attendance wide open: the auto check-in that
+    # happens when somebody signs in to the app, the web dashboard, and Odoo's
+    # own backend widget. The rule was real on one route and absent on the
+    # rest, which is the same as absent.
+    #
+    # A model-level gate cannot be forgotten by a route written next year.
+    #
+    # WHO IT APPLIES TO
+    # -----------------
+    # Only somebody punching THEMSELVES. The discriminator is
+    # ``employee.user_id == self.env.user``, which is true for the app, the web
+    # dashboard and the backend widget, and false for every other writer:
+    #
+    #   HR correcting an employee's day      -> allowed, they always could
+    #   the biometric terminal gateway       -> allowed, the person was there
+    #   the auto check-out cron              -> writes check_out, not create
+    #   an approved off-site request         -> allowed, that IS the decision
+    #
+    # HR managers are exempt even for their own attendance. They can already
+    # create and edit any attendance row for anybody, so refusing them their
+    # own would stop nothing and would strand the person most likely to be
+    # configuring this in the first place.
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            self._assert_location_permits_punch(vals)
+        return super().create(vals_list)
+
+    def _assert_location_permits_punch(self, vals):
+        """Refuse a self-service check-in made away from work.
+
+        Raises ``ValidationError`` with a sentence the employee can act on.
+        Returns quietly in every other case.
+        """
+        context = self.env.context
+        # An approved off-site request is the authorisation. It is written by
+        # the approver, about a position that was already judged.
+        if context.get("perfecthr_offsite_approved"):
+            return
+        if not vals.get("check_in") and not vals.get("employee_id"):
+            return
+
+        employee = self.env["hr.employee"].sudo().browse(vals.get("employee_id"))
+        if not employee.exists():
+            return
+
+        # Not the employee themselves -- see the note above.
+        if not employee.user_id or employee.user_id != self.env.user:
+            return
+        if self.env.user.has_group("hr.group_hr_manager"):
+            return
+
+        company = employee.company_id or self.env.company
+        if (company.attendance_geofence_mode or "off") != "enforce":
+            return
+
+        position = context.get("perfecthr_punch_location") or {}
+        fence = self.env["perfecthr.attendance.geofence"].sudo().evaluate(
+            employee,
+            position.get("latitude"),
+            position.get("longitude"),
+            accuracy_m=position.get("accuracy_m"),
+        )
+        if fence["outcome"] != "refuse":
+            return
+
+        _logger.info(
+            "Check-in refused for %s: %s (%sm from %s)",
+            employee.name, fence["reason"], fence.get("distance_m"),
+            fence.get("location_name"),
+        )
+        raise ValidationError(self._geofence_refusal_message(fence))
+
+    @api.model
+    def _geofence_refusal_message(self, fence):
+        """What the person reads. Three refusals, three different remedies.
+
+        Collapsing them into one message would tell somebody whose GPS is off
+        to walk to the office, and somebody two kilometres away to check their
+        phone settings.
+        """
+        reason = fence.get("reason")
+        if reason == "no_fix":
+            return _(
+                "Perfect HR could not tell where you are, so your check-in was "
+                "not recorded. Turn on location for this app and try again. If "
+                "you are away from work today, send a request to your manager "
+                "instead."
+            )
+        if reason == "fix_too_vague":
+            return _(
+                "Your device could only place you to within about %(accuracy)s "
+                "metres, which is not precise enough to confirm you are at "
+                "work. Step outside or near a window and try again, or send a "
+                "request to your manager.",
+                accuracy=int(fence.get("accuracy_m") or 0),
+            )
+        where = fence.get("location_name") or _("your work location")
+        return _(
+            "You appear to be about %(distance)s from %(where)s, so your "
+            "check-in was not recorded. If you are working away from there "
+            "today, send a request to your manager and it will be recorded "
+            "from the time you asked.",
+            distance=_distance_label(fence.get("distance_m")),
+            where=where,
+        )
+
 
 class AttendanceGeofenceCheck(models.AbstractModel):
     """The check itself, so the endpoint stays about HTTP."""
@@ -193,75 +363,123 @@ class AttendanceGeofenceCheck(models.AbstractModel):
         Returns a dict::
 
             {'outcome': 'allow' | 'flag' | 'refuse',
+             'reason': None | 'out_of_range' | 'no_fix' | 'fix_too_vague',
              'distance_m': int | None,
              'location_name': str | None,
-             'radius_m': int}
+             'radius_m': int,
+             'latitude': float | None,
+             'longitude': float | None,
+             'accuracy_m': float | None,
+             'mode': 'off' | 'warn' | 'enforce'}
 
         ``allow``   nothing to say -- in range, or nothing to measure against
-        ``flag``    out of range, record it and mark the row for review
-        ``refuse``  out of range and the company enforces; the caller asks for
-                    a reason and tries again
+        ``flag``    out of range; record it and mark the row for review
+        ``refuse``  the punch does not happen; the employee may ask their
+                    manager to approve it instead
 
-        Every path that cannot measure returns ``allow``. A missing fix, a
-        work location with no coordinates, an unplaced employee -- none of
-        those are evidence that somebody is in the wrong place, and refusing on
-        them would be refusing a configuration gap.
+        WHAT IS REFUSED, AND WHAT IS NOT
+        --------------------------------
+        Under ENFORCE, three things are refused: being out of range, offering
+        no position at all, and offering one too vague to mean anything. The
+        last two matter as much as the first -- if "no fix" were allowed, then
+        declining the location permission would be the way around the rule and
+        the radius would protect nothing.
+
+        What is NOT refused is a **configuration gap**. An employee with no
+        work location, or whose locations carry no coordinates, is allowed
+        through and the gap is logged. Refusing there would punish people for
+        something only HR can fix, and the first anybody would know of it is a
+        workforce unable to start work.
+
+        The position and accuracy are echoed back so the caller can record
+        them on an approval request without parsing the payload a second time.
         """
+        mode = (employee.company_id or self.env.company).attendance_geofence_mode or "off"
+        strict = mode == "enforce"
+
         blank = {
             "outcome": "allow",
+            "reason": None,
             "distance_m": None,
             "location_name": None,
             "radius_m": 0,
+            "latitude": latitude,
+            "longitude": longitude,
+            "accuracy_m": accuracy_m,
+            "mode": mode,
         }
-
-        company = employee.company_id or self.env.company
-        mode = company.attendance_geofence_mode or "off"
         if mode == "off":
             return blank
 
-        location = employee.work_location_id
-        if not location:
-            # Nobody has said where this person works, so nothing can be said
-            # about whether they are there.
-            return blank
-
-        lat, lon = location._geofence_point()
-        if lat is None or lon is None:
-            _logger.info(
-                "Geofence skipped: work location %s has no coordinates",
-                location.display_name,
+        locations = employee._geofence_locations()
+        if not locations:
+            # A configuration gap, not evidence of anything. Logged at warning
+            # level under enforce because somebody has switched on a rule that
+            # cannot apply to this person, and they should find out from a log
+            # rather than from the employee.
+            (_logger.warning if strict else _logger.info)(
+                "Geofence has nothing to measure against for %s: no work "
+                "location with coordinates. The punch is allowed.",
+                employee.name,
             )
             return blank
 
         if latitude is None or longitude is None:
-            # The phone offered no fix. Refusing here would make location
-            # permission a condition of being paid.
-            return blank
+            if not strict:
+                return blank
+            return {
+                **blank,
+                "outcome": "refuse",
+                "reason": "no_fix",
+                "location_name": locations[0].display_name,
+            }
 
         if accuracy_m and accuracy_m > MAX_TRUSTED_ACCURACY_M:
-            _logger.info(
-                "Geofence skipped for %s: fix accurate only to %sm",
-                employee.name, int(accuracy_m),
+            if not strict:
+                return blank
+            return {
+                **blank,
+                "outcome": "refuse",
+                "reason": "fix_too_vague",
+                "location_name": locations[0].display_name,
+                "accuracy_m": accuracy_m,
+            }
+
+        # The nearest of every place this person may legitimately be. Nearest
+        # rather than first, so the one reported back is the site they are
+        # actually standing at -- telling somebody at the branch how far they
+        # are from head office answers a question nobody asked.
+        best = None
+        for location in locations:
+            lat, lon = location._geofence_point()
+            distance = haversine_metres(latitude, longitude, lat, lon)
+            radius = (
+                location.geofence_radius_m
+                or employee.company_id.attendance_geofence_radius_m
+                or DEFAULT_RADIUS_M
             )
-            return blank
+            # Compared on how far OUTSIDE each radius the punch falls, not on
+            # raw distance: a tight 50m fence 200m away is a worse match than a
+            # generous 500m one 300m away, even though the second is further.
+            overshoot = distance - radius
+            if best is None or overshoot < best[0]:
+                best = (overshoot, distance, radius, location)
 
-        radius = (
-            location.geofence_radius_m
-            or company.attendance_geofence_radius_m
-            or DEFAULT_RADIUS_M
-        )
-        distance = haversine_metres(latitude, longitude, lat, lon)
-
-        # The phone's own margin of error counts in the employee's favour. A
-        # fix 260m out with 80m of accuracy is consistent with standing 180m
-        # away, and refusing it treats uncertainty as guilt.
-        effective = distance - (accuracy_m or 0)
+        overshoot, distance, radius, location = best
 
         result = {
+            **blank,
             "distance_m": int(round(distance)),
             "location_name": location.display_name,
             "radius_m": int(radius),
         }
-        if effective <= radius:
-            return {**result, "outcome": "allow"}
-        return {**result, "outcome": "flag" if mode == "warn" else "refuse"}
+
+        # The phone's own margin of error counts in the employee's favour. A
+        # fix 260m out with 80m of accuracy is consistent with standing 180m
+        # away, and refusing it treats uncertainty as guilt.
+        if (distance - (accuracy_m or 0)) <= radius:
+            return result
+
+        if strict:
+            return {**result, "outcome": "refuse", "reason": "out_of_range"}
+        return {**result, "outcome": "flag", "reason": "out_of_range"}

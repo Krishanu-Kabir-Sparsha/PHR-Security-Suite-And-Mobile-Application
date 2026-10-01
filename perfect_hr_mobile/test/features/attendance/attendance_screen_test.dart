@@ -20,6 +20,7 @@ import 'package:perfect_hr_mobile/features/dashboard/application/employee_home_p
 import 'package:perfect_hr_mobile/features/dashboard/data/employee_home_repository.dart';
 import 'package:perfect_hr_mobile/features/dashboard/domain/employee_home_summary.dart';
 import 'package:perfect_hr_mobile/core/security/punch_location_service.dart';
+import 'package:perfect_hr_mobile/features/attendance/domain/offsite_request.dart';
 
 /// E-02 Attendance.
 ///
@@ -54,10 +55,8 @@ class _StubRepository implements AttendanceRepository {
     double? latitude,
     double? longitude,
     double? accuracyMetres,
-    String? offSiteReason,
   }) async {
     toggleCount++;
-    sentOffSiteReason = offSiteReason;
     sentLatitude = latitude;
     final error = toggleError;
     if (error != null) throw error;
@@ -74,6 +73,26 @@ class _StubRepository implements AttendanceRepository {
     _overview = AttendanceOverview(today: result.today, days: _overview.days);
     return result;
   }
+
+  @override
+  Future<OffsiteRequest> submitOffsiteRequest({
+    required String reason,
+    double? latitude,
+    double? longitude,
+    double? accuracyMetres,
+  }) async {
+    sentOffSiteReason = reason;
+    return OffsiteRequest(
+        id: 'req-1',
+        state: OffsiteRequestState.pending,
+        requestedAt: DateTime.now(),
+        reason: reason,
+        manager: 'Ayesha Rahman',
+    );
+  }
+
+  @override
+  Future<OffsiteRequest?> loadOffsiteRequest() async => null;
 
   @override
   Future<AttendanceToggleResult> toggleBreak({String? breakType}) async {

@@ -101,15 +101,15 @@ class MobileAttendance(http.Controller):
         return request.env["perfecthr.mobile.checkin"].sudo()
 
     def _evaluate_location(self, employee, data):
-        """Run the location check, unless the caller already explained itself.
+        """Run the location check on the position the client sent.
 
-        A payload carrying ``off_site_reason`` is the second attempt: the user
-        has been told they look far from work and has said why. That is
-        accepted and flagged rather than refused again -- refusing a reason
-        that was asked for would be a dead end.
+        Nothing here inspects a reason any more. A reason used to turn a
+        refusal into an acceptance on this very call, which meant the employee
+        authorised their own exception -- see the note at the refusal in
+        ``toggle``. The reason now travels to
+        ``POST /me/attendance/offsite-request`` and waits for a manager.
         """
-        reason = (data.get("off_site_reason") or "").strip()
-        result = (
+        return (
             request.env["perfecthr.attendance.geofence"]
             .sudo()
             .evaluate(
@@ -119,20 +119,30 @@ class MobileAttendance(http.Controller):
                 accuracy_m=self._as_float(data.get("accuracy_m")),
             )
         )
-        if reason and result["outcome"] == "refuse":
-            return {**result, "outcome": "flag"}
-        return result
 
-    def _flag_off_site(self, employee, fence, data):
+    @staticmethod
+    def _refusal_message(fence):
+        """The sentence the employee reads when a punch is refused.
+
+        Delegated to the model so the app, the web dashboard and the Odoo
+        backend all say the same thing. Three refusals need three different
+        remedies -- turn location on, move somewhere with a clearer sky, or
+        ask your manager -- and a single message would send two thirds of
+        people to the wrong one.
+        """
+        return request.env["hr.attendance"]._geofence_refusal_message(fence)
+
+    def _flag_off_site(self, employee, fence):
         """Mark the row just created as an off-site punch, for HR review."""
         session = self._service().open_session(employee)
         if not session:
             return
-        reason = (data.get("off_site_reason") or "").strip()
         session.sudo().write(
             {
                 "off_site": True,
-                "off_site_reason": reason[:1000] or False,
+                # No reason under WARN: nobody was asked for one, and an empty
+                # string here would read in the backend as "they declined to
+                # explain" rather than "we never asked".
                 "off_site_distance_m": fence.get("distance_m") or 0,
             }
         )
@@ -149,15 +159,6 @@ class MobileAttendance(http.Controller):
             return float(value)
         except (TypeError, ValueError):
             return None
-
-    @staticmethod
-    def _distance_label(metres):
-        """A distance a person can picture, rather than a bare number."""
-        if not metres:
-            return "some distance"
-        if metres < 1000:
-            return "%d metres" % int(round(metres / 10.0) * 10)
-        return "%.1f km" % (metres / 1000.0)
 
     def _serialise(self, attendance):
         return self._service().serialise_session(attendance)
@@ -428,27 +429,34 @@ class MobileAttendance(http.Controller):
         if not was_checked_in:
             fence = self._evaluate_location(employee, data)
             if fence["outcome"] == "refuse":
+                # Refused, and that is the end of this punch.
+                #
+                # It used to be the start of a negotiation: the app asked for a
+                # reason and resent, and the punch was accepted on the strength
+                # of whatever was typed. That made the radius a prompt rather
+                # than a control -- anybody willing to write a sentence was
+                # through it. Now the employee asks their MANAGER, and nothing
+                # is recorded until somebody other than the subject agrees.
                 return fail(
                     403,
-                    "You seem to be about %(distance)s away from %(place)s. "
-                    "If you are working away from there, send this again with "
-                    "a short reason and it will be recorded."
-                    % {
-                        "distance": self._distance_label(fence["distance_m"]),
-                        "place": fence["location_name"],
-                    },
+                    self._refusal_message(fence),
                     code="off_site",
                     errors={
+                        "reason": fence["reason"],
                         "distance_m": fence["distance_m"],
                         "radius_m": fence["radius_m"],
                         "location_name": fence["location_name"],
-                        # The client shows a reason field and resends with
-                        # off_site_reason. Named here so the app does not have
-                        # to hard-code the contract.
-                        "requires": "off_site_reason",
+                        # The contract with the client: POST the reason to
+                        # /me/attendance/offsite-request, do NOT resend the
+                        # punch. Named here so the app need not hard-code it.
+                        "requires": "approval_request",
                     },
-                    log="off-site check-in refused for %s at %sm"
-                    % (request.env.user.login, fence["distance_m"]),
+                    log="check-in refused for %s (%s) at %sm"
+                    % (
+                        request.env.user.login,
+                        fence["reason"],
+                        fence["distance_m"],
+                    ),
                 )
 
         try:
@@ -456,7 +464,18 @@ class MobileAttendance(http.Controller):
             # and hr_attendance already grants a user rights over their own
             # records. Punching in with elevated rights would also bypass the
             # suite's Record Freeze guard on a frozen period.
-            employee.with_user(request.env.user)._attendance_action_change(
+            #
+            # The position rides along in the context so the model-level gate
+            # in attendance_geofence.py can see it. That gate is the backstop
+            # for every route into attendance; this controller having already
+            # evaluated the same position simply means it agrees.
+            employee.with_user(request.env.user).with_context(
+                perfecthr_punch_location={
+                    "latitude": self._as_float(data.get("latitude")),
+                    "longitude": self._as_float(data.get("longitude")),
+                    "accuracy_m": self._as_float(data.get("accuracy_m")),
+                }
+            )._attendance_action_change(
                 geo_information=self._geo_information(data)
             )
         except AccessError:
@@ -487,7 +506,7 @@ class MobileAttendance(http.Controller):
         # so it has to land on the row whether the punch was allowed outright
         # or accepted on the strength of a reason.
         if not was_checked_in and fence["outcome"] in ("flag", "refuse"):
-            self._flag_off_site(employee, fence, data)
+            self._flag_off_site(employee, fence)
 
         _logger.info(
             "Mobile attendance %s: %s",
@@ -501,3 +520,123 @@ class MobileAttendance(http.Controller):
                 "today": self._today_state(employee),
             }
         )
+
+    # ------------------------------------------------------------------
+    # Asking a manager to accept a punch made away from work
+    # ------------------------------------------------------------------
+    @http.route(
+        "/api/mobile/v1/me/attendance/offsite-request",
+        type="http",
+        auth="public",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    @authenticated
+    def submit_offsite_request(self, **kwargs):
+        """The way out of a refused check-in.
+
+        The employee has been told they are not where they need to be. They
+        say where they are and why; their manager decides. Nothing is recorded
+        here -- that is the point. An approval records the check-in at the time
+        of THIS call, not the time it is approved, so an afternoon decision
+        does not rewrite somebody's morning.
+        """
+        employee = request_employee()
+        if not employee:
+            return fail(
+                404,
+                "Your login is not linked to an employee file yet, so "
+                "attendance cannot be recorded for you. Ask HR to finish "
+                "setting up your profile.",
+                code="no_employee",
+            )
+
+        data = _payload() or kwargs
+        reason = (data.get("reason") or "").strip()
+        if len(reason) < 3:
+            return fail(
+                422,
+                "Please say where you are and what you are doing.",
+                code="reason_required",
+                errors={"reason": "Required."},
+            )
+
+        # Re-evaluated here rather than trusted from the client. The position
+        # on the request is what a manager will judge, and a client that could
+        # supply its own distance could supply a flattering one.
+        fence = self._evaluate_location(employee, data)
+
+        if fence["outcome"] == "allow":
+            # They are in range after all -- the fix improved while they typed,
+            # which happens constantly as a phone settles. Sending this to a
+            # manager would waste both their time.
+            return fail(
+                409,
+                "You are within range of your work location now. Close this "
+                "and check in as usual.",
+                code="in_range_now",
+                log="offsite request abandoned, now in range: %s"
+                % request.env.user.login,
+            )
+
+        record = request.env["hr.attendance.offsite.request"].submit(
+            employee, fence, reason
+        )
+        _logger.info(
+            "Off-site check-in requested by %s (%s, %sm)",
+            request.env.user.login, fence["reason"], fence.get("distance_m"),
+        )
+        return ok(
+            {
+                "request": record._payload(),
+                "message": _manager_sentence(record),
+            }
+        )
+
+    @http.route(
+        "/api/mobile/v1/me/attendance/offsite-request",
+        type="http",
+        auth="public",
+        methods=["GET"],
+        csrf=False,
+        save_session=False,
+    )
+    @authenticated
+    def my_offsite_request(self, **kwargs):
+        """The most recent request, so the app can say what became of it.
+
+        Without this the employee sends a request into silence and has no way
+        to tell a pending one from a rejected one except by trying to check in
+        again and being refused a second time.
+        """
+        employee = request_employee()
+        if not employee:
+            return ok({"request": None})
+
+        record = (
+            request.env["hr.attendance.offsite.request"]
+            .sudo()
+            .search([("employee_id", "=", employee.id)], order="id desc", limit=1)
+        )
+        return ok({"request": record._payload() if record else None})
+
+
+def _manager_sentence(record):
+    """Who the employee should expect to hear from.
+
+    Named rather than left as "your manager", because an employee whose record
+    has no manager set would otherwise be told to wait on somebody who does
+    not exist. In that case HR is the honest answer.
+    """
+    manager = record.manager_id.name
+    if manager:
+        return (
+            "Sent to %s. Your check-in will be recorded from the time you "
+            "asked, once it is approved." % manager
+        )
+    return (
+        "Sent to HR. Your check-in will be recorded from the time you asked, "
+        "once it is approved."
+    )
+

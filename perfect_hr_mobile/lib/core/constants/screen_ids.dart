@@ -75,6 +75,7 @@ abstract final class ScreenIds {
   static const String more = 'SET-01';
   static const String security = 'SET-02';
   static const String subscription = 'SET-03';
+  static const String workLocations = 'SET-04';
 
   // Super Admin — Functional Blueprint §31. Not in Release 1.
   // The Blueprint does not assign IDs to the SaaS Control experience, so these

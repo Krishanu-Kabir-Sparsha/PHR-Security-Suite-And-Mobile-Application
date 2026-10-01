@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_offsite_request_list" model="ir.ui.view">
+        <field name="name">hr.attendance.offsite.request.list</field>
+        <field name="model">hr.attendance.offsite.request</field>
+        <field name="arch" type="xml">
+            <list string="Off-Site Check-Ins" decoration-warning="state == 'pending'"
+                  decoration-muted="state == 'rejected'">
+                <field name="requested_at"/>
+                <field name="employee_id"/>
+                <field name="manager_id" optional="show"/>
+                <field name="location_name" optional="show"/>
+                <field name="distance_m" optional="show"/>
+                <field name="refusal_reason"/>
+                <field name="reason"/>
+                <field name="state" widget="badge"
+                       decoration-warning="state == 'pending'"
+                       decoration-success="state == 'approved'"
+                       decoration-danger="state == 'rejected'"/>
+                <field name="company_id" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_offsite_request_form" model="ir.ui.view">
+        <field name="name">hr.attendance.offsite.request.form</field>
+        <field name="model">hr.attendance.offsite.request</field>
+        <field name="arch" type="xml">
+            <form string="Off-Site Check-In">
+                <header>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="btn-primary" invisible="state != 'pending'"
+                            confirm="Record this check-in at the time it was attempted?"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            invisible="state != 'pending'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="pending,approved"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="employee_id" readonly="1"/></h1>
+                    </div>
+                    <!--
+                        Attempted At is given its own prominence because it is
+                        the single fact an approver most needs and most easily
+                        overlooks: approving records the check-in at THIS time,
+                        not at the time of approval.
+                    -->
+                    <group>
+                        <group string="The Attempt">
+                            <field name="requested_at"/>
+                            <field name="refusal_reason"/>
+                            <field name="location_name"/>
+                            <field name="distance_m"/>
+                            <field name="accuracy_m"/>
+                        </group>
+                        <group string="Decision">
+                            <field name="manager_id"/>
+                            <field name="approver_id" invisible="state == 'pending'"/>
+                            <field name="decided_at" invisible="state == 'pending'"/>
+                            <field name="attendance_id" invisible="state != 'approved'"/>
+                        </group>
+                    </group>
+                    <group string="What They Said">
+                        <field name="reason" nolabel="1" readonly="1"/>
+                    </group>
+                    <group string="Note">
+                        <field name="decision_note" nolabel="1"
+                               placeholder="Optional. Why this was approved or rejected."/>
+                    </group>
+                    <group string="Where" col="2">
+                        <field name="latitude"/>
+                        <field name="longitude"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_offsite_request_search" model="ir.ui.view">
+        <field name="name">hr.attendance.offsite.request.search</field>
+        <field name="model">hr.attendance.offsite.request</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="employee_id"/>
+                <field name="reason"/>
+                <filter name="pending" string="Waiting For Me"
+                        domain="[('state', '=', 'pending')]"/>
+                <filter name="approved" string="Approved"
+                        domain="[('state', '=', 'approved')]"/>
+                <filter name="rejected" string="Rejected"
+                        domain="[('state', '=', 'rejected')]"/>
+                <separator/>
+                <!--
+                    "No position" is separated out because it is a different
+                    problem from being far away: it usually means a permission
+                    or a handset issue, and a run of them from one person is
+                    worth looking into rather than deciding one at a time.
+                -->
+                <filter name="no_fix" string="Device Reported No Position"
+                        domain="[('refusal_reason', '!=', 'out_of_range')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="by_employee" string="Employee"
+                            context="{'group_by': 'employee_id'}"/>
+                    <filter name="by_manager" string="Manager"
+                            context="{'group_by': 'manager_id'}"/>
+                    <filter name="by_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_offsite_request" model="ir.actions.act_window">
+        <field name="name">Off-Site Check-Ins</field>
+        <field name="res_model">hr.attendance.offsite.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_pending': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Nothing waiting</p>
+            <p>
+                When the location check refuses somebody's check-in, they can
+                ask for it to be recorded anyway. Those requests appear here.
+            </p>
+            <p>
+                Approving records the check-in at the time it was attempted,
+                not the time you approve it.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_offsite_request"
+              name="Off-Site Check-Ins"
+              parent="hr_attendance.menu_hr_attendance_root"
+              action="action_offsite_request"
+              groups="hr_attendance.group_hr_attendance_officer"
+              sequence="35"/>
+
+</odoo>

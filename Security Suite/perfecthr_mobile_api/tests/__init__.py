@@ -9,3 +9,4 @@ from . import test_attendance_break
 from . import test_attendance_geofence
 from . import test_employment_profile
 from . import test_subscription
+from . import test_geofence_enforcement

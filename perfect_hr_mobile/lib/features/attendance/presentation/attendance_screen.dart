@@ -296,16 +296,53 @@ class _TodayCard extends ConsumerWidget {
       builder: (context) => _OffSiteReasonDialog(message: failure.userMessage),
     );
     if (reason == null || reason.trim().isEmpty || !context.mounted) return;
-    await controller.toggle(offSiteReason: reason.trim());
+
+    // Note what this does NOT do: retry the punch. Being refused and then
+    // sending the same punch again with a sentence attached was the old
+    // behaviour, and it meant the employee authorised their own exception.
+    // This creates a request and records nothing.
+    final request = await controller.submitOffsiteRequest(reason.trim());
+    if (!context.mounted) return;
+
+    if (request == null) {
+      final error = ref.read(attendanceToggleProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is AppFailure
+                ? error.userMessage
+                : 'Your request could not be sent. Please try again.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          request.manager != null
+              ? 'Sent to ${request.manager}. Your check-in will be recorded '
+                  'from the time you asked, once it is approved.'
+              : 'Sent to HR. Your check-in will be recorded from the time you '
+                  'asked, once it is approved.',
+        ),
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 }
 
-/// Asks why somebody is checking in away from their work location.
+/// Asks where somebody is, when the location rule has refused their check-in.
 ///
-/// A free-text field rather than a list of reasons. The list would be wrong
-/// on its first day — site visit, client meeting, delivery, power cut at the
+/// A free-text field rather than a list of reasons. The list would be wrong on
+/// its first day — site visit, client meeting, delivery, power cut at the
 /// office, working from a cafe because the lift is broken — and an employee
-/// forced to pick the nearest wrong option teaches HR nothing.
+/// forced to pick the nearest wrong option teaches their manager nothing.
+///
+/// The wording is careful about one thing: this does **not** check anybody in.
+/// A dialog that said "Check in anyway" after a refusal would be lying, and
+/// the employee would walk away believing their day had started.
 class _OffSiteReasonDialog extends StatefulWidget {
   const _OffSiteReasonDialog({required this.message});
 
@@ -327,7 +364,7 @@ class _OffSiteReasonDialogState extends State<_OffSiteReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Working away from your usual place?'),
+      title: const Text('Ask to be checked in'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,13 +378,13 @@ class _OffSiteReasonDialogState extends State<_OffSiteReasonDialog> {
             maxLength: 200,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
-              labelText: 'What are you doing today?',
+              labelText: 'Where are you, and what are you doing?',
               hintText: 'Client visit at Gulshan',
             ),
             onSubmitted: (value) => Navigator.of(context).pop(value),
           ),
           Text(
-            'Your check-in will be recorded with this note for HR.',
+            'Nothing is recorded yet. If your manager approves, your check-in is saved from the time you asked.',
             style: context.text.bodySmall
                 ?.copyWith(color: context.palette.inkTertiary),
           ),
@@ -360,7 +397,7 @@ class _OffSiteReasonDialogState extends State<_OffSiteReasonDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('Check in anyway'),
+          child: const Text('Send to my manager'),
         ),
       ],
     );

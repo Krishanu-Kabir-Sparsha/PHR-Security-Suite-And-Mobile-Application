@@ -1,7 +1,7 @@
 name: perfect_hr_mobile
 description: Perfect HR Mobile — AI-powered workforce companion.
 publish_to: "none"
-version: 0.2.0+2
+version: 0.3.0+3
 
 # Dependency set is the approved stack from Tech-Stack §27 and Instructions §6.
 # Constraints are caret ranges; run `flutter pub get` then commit the generated

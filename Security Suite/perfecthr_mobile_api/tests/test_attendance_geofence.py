@@ -99,8 +99,26 @@ class TestAttendanceGeofence(TransactionCase):
         )
         self.assertEqual(result["outcome"], "allow")
 
-    def test_no_fix_is_allowed(self):
-        """Refusing here makes location permission a condition of being paid."""
+    def test_no_fix_is_refused_when_enforcing(self):
+        """THE rule that makes ENFORCE mean anything.
+
+        This asserts the opposite of what it used to, and the reversal is
+        deliberate. The old reading was "refusing here makes location
+        permission a condition of being paid" -- true, and the company has now
+        chosen exactly that, because the alternative is worse: if a missing fix
+        were allowed, declining the location permission would be the way around
+        the rule and the radius would protect nothing at all.
+
+        The way out for somebody genuinely unable to get a fix is an approval
+        request, not a silent pass.
+        """
+        result = self.Fence.evaluate(self.employee, None, None)
+        self.assertEqual(result["outcome"], "refuse")
+        self.assertEqual(result["reason"], "no_fix")
+
+    def test_no_fix_is_still_allowed_when_only_warning(self):
+        """WARN is for finding out, not for stopping anybody."""
+        self.company.attendance_geofence_mode = "warn"
         self.assertEqual(
             self.Fence.evaluate(self.employee, None, None)["outcome"], "allow"
         )
@@ -114,6 +132,18 @@ class TestAttendanceGeofence(TransactionCase):
         )
         self.assertEqual(result["outcome"], "allow")
 
+    def test_a_configuration_gap_never_refuses_anybody(self):
+        """An employee nobody has placed is allowed through, even on ENFORCE.
+
+        This is the one case that must NOT be strict. Refusing here would
+        punish people for something only HR can fix, and the first anybody
+        would know of it is a workforce unable to start work. The gap is
+        logged at warning level instead.
+        """
+        self.employee.work_location_id = False
+        result = self.Fence.evaluate(self.employee, CAMPUS_LAT + 0.5, CAMPUS_LON)
+        self.assertEqual(result["outcome"], "allow")
+
     def test_an_employee_with_no_work_location_checks_nothing(self):
         self.employee.work_location_id = False
         result = self.Fence.evaluate(
@@ -121,8 +151,23 @@ class TestAttendanceGeofence(TransactionCase):
         )
         self.assertEqual(result["outcome"], "allow")
 
-    def test_a_vague_fix_is_not_evidence(self):
-        """A reading accurate to kilometres says nothing about where anyone is."""
+    def test_a_vague_fix_is_refused_when_enforcing(self):
+        """Also reversed, and for the same reason as the test above.
+
+        A reading accurate to kilometres genuinely says nothing about where
+        anyone is -- which under ENFORCE is the point. The rule asks somebody
+        to PROVE they are at work, and a fix that cannot prove it is not a
+        weaker yes, it is a no. Letting it through would mean a handset with
+        deliberately degraded location could check in from anywhere.
+        """
+        result = self.Fence.evaluate(
+            self.employee, CAMPUS_LAT + 0.01, CAMPUS_LON, accuracy_m=2000
+        )
+        self.assertEqual(result["outcome"], "refuse")
+        self.assertEqual(result["reason"], "fix_too_vague")
+
+    def test_a_vague_fix_is_still_allowed_when_only_warning(self):
+        self.company.attendance_geofence_mode = "warn"
         result = self.Fence.evaluate(
             self.employee, CAMPUS_LAT + 0.01, CAMPUS_LON, accuracy_m=2000
         )

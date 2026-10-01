@@ -45,7 +45,11 @@ enum AppFeature {
   // The workspace's own plan. Offered only to administrators, and only where
   // the deployment actually has a subscription -- the server decides both, so
   // the key is simply absent for everyone else.
-  subscription('subscription', 'Subscription', null);
+  subscription('subscription', 'Subscription', null),
+  // Placing a geofence by standing in it. Offered to whoever may actually
+  // write a work location, which is a different set from the workspace
+  // administrators who see the subscription.
+  workLocations('work_locations', 'Work locations', null);
 
   const AppFeature(this.wireValue, this.label, this.odooModule);
 

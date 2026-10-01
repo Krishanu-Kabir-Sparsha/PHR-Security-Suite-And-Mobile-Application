@@ -20,20 +20,20 @@ purely because the other two were already there.
 
 | Module | Version | Where it lives |
 |---|---|---|
-| `perfecthr_mobile_api` | **18.0.1.15.0** | `sec_security_suite_addons/Security Suite/` |
+| `perfecthr_mobile_api` | **18.0.1.16.0** | `sec_security_suite_addons/Security Suite/` |
 | `sec_core` | 18.0.1.2.0 | `sec_security_suite_addons/Security Suite/` |
 | `sec_declaration_gateway` | 18.0.1.0.0 | `sec_security_suite_addons/Security Suite/` |
 | `sec_plaza_rbac` | 18.0.1.5.0 | `sec_security_suite_addons/Security Suite/` |
 | `sec_webauthn_auth` | 18.0.1.9.0 | `sec_security_suite_addons/Security Suite/` |
 | `sec_override_engine` | 18.0.1.2.0 | not a mobile dependency; carries its own alert fix |
-| `hrms_dashboard` | **18.0.1.0.12** | `Debranded Apps (connected to github odoo intern)/` |
+| `hrms_dashboard` | **18.0.1.0.13** | `Debranded Apps (connected to github odoo intern)/` |
 | `saas_subscription` | **18.0.1.4.0** | master only — see the fleet rollout below |
 | `saas_tenant_guard` | **18.0.1.1.0** | master **and every tenant** |
-| `perfect_hr_mobile` | **0.2.0+2** | **rebuild the APK** |
+| `perfect_hr_mobile` | **0.3.0+3** | **rebuild the APK** |
 
 Check which build is on the handset with
 `adb shell dumpsys package com.perfecthr.perfect_hr_mobile | grep versionName` — this
-round is **0.2.0+2**; the previous one was 0.1.0+1.
+round is **0.3.0+3**; the previous one was 0.2.0+2.
 
 The APK **must** be rebuilt — `geolocator: ^13.0.1` is a new native dependency.
 The manifest has declared `ACCESS_FINE_LOCATION` since the first build with
@@ -368,24 +368,114 @@ and note it as untested rather than passing it.
 | 3.14 | **Double-deduction check.** Same test on an employee with a scheduled lunch | Lunch is **not** deducted on top — a 1h break must not cost 2h | ☐ |
 | 3.15 | Employee with **no** recorded break | Worked Hours unchanged from before this release | ☐ |
 
-### 5.4 Geofence
+### 5.4 Location rule — the full run
 
-Set company geofence mode to **Enforce** first.
+Read [`GEOFENCE.md`](GEOFENCE.md) first. Three things will surprise you
+otherwise: the rule now applies to the **web** and to **signing in**, a device
+that reports no position is **refused**, and a refusal is answered by asking a
+**manager** rather than by typing a reason and trying again.
+
+#### Step A — place the locations (do this standing at the site)
 
 | # | Step | Expected | ✓ |
 |---|---|---|---|
-| 3.16 | Check in from far away | Refused with the **distance** and the location name | ☐ |
-| 3.17 | The refusal | A **reason prompt**, not a dead end | ☐ |
-| 3.18 | Enter "Client visit at Gulshan", send again | **Accepted** | ☐ |
-| 3.19 | Odoo → Attendances → filter **Away From Work Location** | The row is there with the reason | ☐ |
-| 3.20 | Deny location permission on the phone, check in | **Still punches.** No coordinates sent, no refusal | ☐ |
-| 3.21 | Turn location off entirely, check in | Still punches | ☐ |
-| 3.22 | Set mode to `Warn` | Punch accepted first time, flagged off-site | ☐ |
-| 3.23 | Set mode to `Off` | No location check at all | ☐ |
+| G1 | Sign in as an **HR manager** → More | **Work locations** tile is there | ☐ |
+| G2 | Sign in as ordinary **Staff** → More | Tile is **absent** | ☐ |
+| G3 | Open it | Every work location listed, each marked set or not set | ☐ |
+| G4 | An unplaced one | Says *"nobody is checked against this location"* — not "stricter" | ☐ |
+| G5 | Stand at the entrance, tap **Set from here** | Confirmation dialog first | ☐ |
+| G6 | Confirm | Saved; the card flips to *Set, with a 250 metre radius* | ☐ |
+| G7 | Odoo → Employees → Configuration → Work Locations | Coordinates match, *Location Known* is ticked | ☐ |
+| G8 | Try it again **indoors, deep in a building** | Refused, naming the accuracy it got and the 100 m it needs | ☐ |
 
-> 3.20 and 3.21 are the ones that matter most. A GPS failure must never stop
-> someone being recorded as at work — those failures fall hardest on whoever has
-> the older handset or the basement office.
+> G8 is the guard that matters. A centre captured from a vague fix puts the
+> boundary somewhere nobody chose, and nothing reveals it until a workforce
+> cannot check in.
+
+#### Step B — WARN first, always
+
+Set **Location Check = Warn** on the company.
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G9 | Check in from the office | Normal, nothing said | ☐ |
+| G10 | Check in from home | **Allowed**, no prompt | ☐ |
+| G11 | Odoo → Attendances → *Away From Work Location* | The punch is there with its distance | ☐ |
+| G12 | The flagged row's Reason | **Empty** — nobody was asked, so nothing is claimed | ☐ |
+| G13 | Deny location permission, check in | Allowed. WARN never stops anybody | ☐ |
+
+#### Step C — ENFORCE
+
+Set **Location Check = Enforce**.
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G14 | Check in from inside the radius | Works normally | ☐ |
+| G15 | Check in from home | **Refused**, naming the distance and the location | ☐ |
+| G16 | Deny location permission, then check in | **Refused** — *"could not tell where you are"* | ☐ |
+| G17 | The two messages above | **Different**, with different remedies | ☐ |
+
+#### Step D — every route, not just the button
+
+This is the half that was missing before. Test each one from **outside** the
+radius.
+
+| # | Route | Expected | ✓ |
+|---|---|---|---|
+| G18 | **Sign out of the app and sign back in** | You get in, but a **amber banner** says you were *not* checked in, and why | ☐ |
+| G19 | Odoo → Attendances | **No row** was created by that sign-in | ☐ |
+| G20 | **Web dashboard** check-in button | Browser asks for location, then **refused** with the same sentence | ☐ |
+| G21 | Web, with location permission **denied** | Refused | ☐ |
+| G22 | Odoo **backend attendance widget** (systray) | Refused | ☐ |
+| G23 | From a **desktop** browser at the office | Likely still refused — desktop location is accurate to kilometres. Expected; use the phone | ☐ |
+
+> G18 and G19 together are the important pair. Signing in is a check-in on this
+> product, so a sign-in that skipped the rule was the way around it.
+
+#### Step E — what must keep working
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G24 | HR edits somebody else's attendance in Odoo | **Allowed** — corrections are not punches | ☐ |
+| G25 | A biometric terminal punch | **Allowed** — the person was physically there | ☐ |
+| G26 | An employee with **no work location set** | **Allowed**. A config gap never costs attendance | ☐ |
+| G27 | An **HR manager** checking themselves in from home | **Allowed**, deliberately — see GEOFENCE.md §2 | ☐ |
+| G28 | **Check OUT** from outside the radius | **Allowed** — the rule is check-in only | ☐ |
+
+#### Step F — several work locations
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G29 | From the branch, with only head office on the record | Refused | ☐ |
+| G30 | Add the branch to **Other Places They May Check In** | Now accepted | ☐ |
+| G31 | Head office still works | Yes | ☐ |
+| G32 | The refusal message, standing nearer the branch | Names the **branch**, not head office | ☐ |
+
+#### Step G — the approval path
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G33 | Refused → the dialog | Titled **"Ask to be checked in"**, button reads **Send to my manager** | ☐ |
+| G34 | The dialog's small print | Says plainly that **nothing is recorded yet** | ☐ |
+| G35 | Send it | Confirmation naming the manager | ☐ |
+| G36 | Odoo → Attendances | **Still no attendance row** | ☐ |
+| G37 | Tap Check In three more times and send again | **One** pending request, not four | ☐ |
+| G38 | Odoo → Attendances → **Off-Site Check-Ins** | The request, with position, distance and what they wrote | ☐ |
+| G39 | Try to approve it **as the employee themselves** | Refused — nobody decides their own | ☐ |
+| G40 | Approve it as the manager | Attendance appears | ☐ |
+| G41 | **The check-in time on that row** | The time they **tried**, not the time you approved | ☐ |
+| G42 | The row | Flagged *Away From Work Location*, with their reason | ☐ |
+| G43 | Reject a different request | Nothing recorded; state Rejected | ☐ |
+| G44 | Approve one where the employee already has attendance at that time | Refused with *"already has attendance"*, not a constraint error | ☐ |
+
+> G41 is the one to be careful about. An approval at five in the afternoon must
+> not record somebody as having started work at five.
+
+#### Step H — turn it back off
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| G45 | Set Location Check back to **Off** | Check-in works from anywhere again | ☐ |
 
 ### 5.5 Cross-dynamic (phone ↔ web)
 

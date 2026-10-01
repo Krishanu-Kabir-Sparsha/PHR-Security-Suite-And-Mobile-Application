@@ -40,6 +40,7 @@ class _StubAuthRepository implements AuthRepository {
     String? deviceLabel,
     String? companyId,
     String? authMode,
+    Map<String, Object?>? position,
   }) async {
     throw UnimplementedError();
   }
@@ -48,6 +49,7 @@ class _StubAuthRepository implements AuthRepository {
   Future<AuthSession> completeSignIn({
     required String mfaToken,
     required Map<String, dynamic> assertion,
+    Map<String, Object?>? position,
   }) async {
     throw UnimplementedError();
   }
@@ -56,6 +58,7 @@ class _StubAuthRepository implements AuthRepository {
   Future<AuthSession> completeSignInWithDevice({
     required String mfaToken,
     required Map<String, dynamic> signaturePayload,
+    Map<String, Object?>? position,
   }) async {
     throw UnimplementedError();
   }

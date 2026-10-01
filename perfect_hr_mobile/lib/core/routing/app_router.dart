@@ -20,6 +20,7 @@ import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/security_screen.dart';
 import 'nav_profile.dart';
 import '../../features/subscription/presentation/subscription_screen.dart';
+import '../../features/attendance/presentation/work_location_setup_screen.dart';
 
 /// Application router.
 ///
@@ -397,6 +398,14 @@ List<RouteBase> _nestedRoutesFor(String branchPath) {
           path: 'subscription',
           name: ScreenIds.subscription,
           builder: (_, __) => const SubscriptionScreen(),
+        ),
+        // SET-04. Same reasoning as SET-03: the route exists for everyone and
+        // the screen handles its own 403, so a stale build cannot navigate
+        // somewhere it then fails to render.
+        GoRoute(
+          path: 'work-locations',
+          name: ScreenIds.workLocations,
+          builder: (_, __) => const WorkLocationSetupScreen(),
         ),
       ],
     _ => const [],

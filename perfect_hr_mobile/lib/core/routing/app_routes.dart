@@ -55,6 +55,10 @@ abstract final class AppRoutes {
   /// refuses the payload to anybody else, so the tile is simply not drawn.
   static const String subscription = '/more/subscription';
 
+  /// SET-04. Placing a geofence by standing in it. HR managers only;
+  /// the server refuses the data to anybody else.
+  static const String workLocations = '/more/work-locations';
+
   // Manager branch
   static const String employee360 = '/team/:employeeId';
   static String employee360For(String id) => '/team/$id';

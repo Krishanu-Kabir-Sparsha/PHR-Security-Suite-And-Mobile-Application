@@ -5,6 +5,7 @@ import '../../../core/networking/api_client.dart';
 import '../../../core/networking/connectivity_service.dart';
 import '../../dashboard/domain/employee_home_summary.dart';
 import '../domain/attendance_overview.dart';
+import '../domain/offsite_request.dart';
 
 abstract interface class AttendanceRepository {
   Future<DataSnapshot<AttendanceOverview>> loadOverview({bool forceRefresh});
@@ -19,8 +20,30 @@ abstract interface class AttendanceRepository {
     double? latitude,
     double? longitude,
     double? accuracyMetres,
-    String? offSiteReason,
   });
+
+  /// Ask a manager to accept a check-in that the location rule refused.
+  ///
+  /// Deliberately NOT a parameter on [toggle]. It used to be: the punch was
+  /// resent carrying a reason and accepted on the strength of it, which meant
+  /// the employee authorised their own exception and the radius stopped
+  /// nobody who was willing to type a sentence.
+  ///
+  /// This records nothing. It creates a request; attendance appears only if
+  /// somebody else approves, and then at the time of the attempt rather than
+  /// the time of the decision.
+  Future<OffsiteRequest> submitOffsiteRequest({
+    required String reason,
+    double? latitude,
+    double? longitude,
+    double? accuracyMetres,
+  });
+
+  /// The most recent request, so the app can say what became of it.
+  ///
+  /// Without this an employee sends a request into silence, and the only way
+  /// to learn it was rejected is to be refused a second time.
+  Future<OffsiteRequest?> loadOffsiteRequest();
 
   /// Start the break if none is running, end it if one is.
   ///
@@ -100,7 +123,6 @@ class ApiAttendanceRepository implements AttendanceRepository {
     double? latitude,
     double? longitude,
     double? accuracyMetres,
-    String? offSiteReason,
   }) async {
     final json = await _client.post<Map<String, dynamic>>(
       '$path/toggle',
@@ -111,17 +133,42 @@ class ApiAttendanceRepository implements AttendanceRepository {
         // deciding anybody is out of range, so a poor fix counts in the
         // employee's favour rather than against them.
         if (accuracyMetres != null) 'accuracy_m': accuracyMetres,
-        // Present only on the second attempt, after the server said the punch
-        // looked far from work and the user explained why. Its presence is
-        // what turns a refusal into a flagged acceptance.
-        if (offSiteReason != null && offSiteReason.isNotEmpty)
-          'off_site_reason': offSiteReason,
       },
     );
-    // The cached overview is wrong the instant this succeeds, and this screen
-    // is the one place where showing a stale state is actively harmful.
     await _resource.invalidate();
     return AttendanceToggleResult.fromJson(json);
+  }
+
+  @override
+  Future<OffsiteRequest> submitOffsiteRequest({
+    required String reason,
+    double? latitude,
+    double? longitude,
+    double? accuracyMetres,
+  }) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '$path/offsite-request',
+      data: <String, Object?>{
+        'reason': reason,
+        // Sent again rather than remembered from the refused punch. The server
+        // re-judges the position, because what a manager will be shown has to
+        // be measured rather than taken from a client that could flatter it.
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (accuracyMetres != null) 'accuracy_m': accuracyMetres,
+      },
+    );
+    final raw = json['request'];
+    return OffsiteRequest.fromJson((raw as Map).cast<String, Object?>());
+  }
+
+  @override
+  Future<OffsiteRequest?> loadOffsiteRequest() async {
+    final json = await _client.get<Map<String, dynamic>>('$path/offsite-request');
+    final raw = json['request'];
+    return raw is Map
+        ? OffsiteRequest.fromJson(raw.cast<String, Object?>())
+        : null;
   }
 
   @override
@@ -215,7 +262,6 @@ class MockAttendanceRepository implements AttendanceRepository {
     double? latitude,
     double? longitude,
     double? accuracyMetres,
-    String? offSiteReason,
   }) async {
     await Future<void>.delayed(latency);
     final failure = failWith;
@@ -237,6 +283,31 @@ class MockAttendanceRepository implements AttendanceRepository {
       workplaceLabel: _overview.workplaceLabel,
     );
     return AttendanceToggleResult(checkedIn: !wasIn, today: today);
+  }
+
+  @override
+  Future<OffsiteRequest> submitOffsiteRequest({
+    required String reason,
+    double? latitude,
+    double? longitude,
+    double? accuracyMetres,
+  }) async {
+    await Future<void>.delayed(latency);
+    return OffsiteRequest(
+      id: 'mock-1',
+      state: OffsiteRequestState.pending,
+      requestedAt: DateTime.now(),
+      reason: reason,
+      distanceMetres: 1100,
+      locationName: 'Head Office',
+      manager: 'Ayesha Rahman',
+    );
+  }
+
+  @override
+  Future<OffsiteRequest?> loadOffsiteRequest() async {
+    await Future<void>.delayed(latency);
+    return null;
   }
 
   @override

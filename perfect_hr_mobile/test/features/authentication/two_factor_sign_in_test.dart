@@ -65,6 +65,7 @@ class _StubRepository implements AuthRepository {
     String? deviceLabel,
     String? companyId,
     String? authMode,
+    Map<String, Object?>? position,
   }) async {
     sentCompanyId = companyId;
     sentAuthMode = authMode;
@@ -84,6 +85,7 @@ class _StubRepository implements AuthRepository {
   Future<AuthSession> completeSignIn({
     required String mfaToken,
     required Map<String, dynamic> assertion,
+    Map<String, Object?>? position,
   }) async {
     completeCount++;
     sentMfaToken = mfaToken;
@@ -95,6 +97,7 @@ class _StubRepository implements AuthRepository {
   Future<AuthSession> completeSignInWithDevice({
     required String mfaToken,
     required Map<String, dynamic> signaturePayload,
+    Map<String, Object?>? position,
   }) async {
     completeWithDeviceCount++;
     sentMfaToken = mfaToken;

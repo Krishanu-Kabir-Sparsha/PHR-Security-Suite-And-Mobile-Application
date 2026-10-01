@@ -18,6 +18,7 @@ import 'package:perfect_hr_mobile/features/authentication/data/secure_token_stor
 import 'package:perfect_hr_mobile/features/authentication/domain/auth_session.dart';
 import 'package:perfect_hr_mobile/features/authentication/domain/sign_in_outcome.dart';
 import 'package:perfect_hr_mobile/features/authentication/presentation/login_screen.dart';
+import 'package:perfect_hr_mobile/core/security/punch_location_service.dart';
 
 /// Workspace, company, method — the three questions that come before the
 /// password.
@@ -168,6 +169,7 @@ class _StubAuth implements AuthRepository {
     String? deviceLabel,
     String? companyId,
     String? authMode,
+    Map<String, Object?>? position,
   }) async {
     sentLogin = login;
     sentCompanyId = companyId;
@@ -179,6 +181,7 @@ class _StubAuth implements AuthRepository {
   Future<AuthSession> completeSignIn({
     required String mfaToken,
     required Map<String, dynamic> assertion,
+    Map<String, Object?>? position,
   }) async =>
       _session();
 
@@ -186,6 +189,7 @@ class _StubAuth implements AuthRepository {
   Future<AuthSession> completeSignInWithDevice({
     required String mfaToken,
     required Map<String, dynamic> signaturePayload,
+    Map<String, Object?>? position,
   }) async =>
       _session();
 
@@ -252,6 +256,13 @@ ProviderContainer _container({
     overrides: [
       authRepositoryProvider.overrideWithValue(auth),
       tenantRepositoryProvider.overrideWithValue(tenants),
+      // Signing in now captures the handset's position, because signing in IS
+      // a check-in and the location rule judges it. The real geolocator has
+      // no platform channel in a widget test and never calls back, which
+      // presents as pumpAndSettle timing out with nothing to point at.
+      punchLocationServiceProvider.overrideWithValue(
+        const NoPunchLocationService(),
+      ),
       deviceKeyServiceProvider.overrideWithValue(_StubDeviceKeys()),
       secureTokenStoreProvider.overrideWith(
         (ref) => SecureTokenStore(repository: auth),

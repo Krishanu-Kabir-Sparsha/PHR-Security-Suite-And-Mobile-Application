@@ -3,6 +3,7 @@ from . import pending_auth
 from . import res_company
 from . import attendance_break
 from . import attendance_geofence
+from . import offsite_request
 from . import mobile_checkin
 from . import employment_profile
 from . import subscription_snapshot

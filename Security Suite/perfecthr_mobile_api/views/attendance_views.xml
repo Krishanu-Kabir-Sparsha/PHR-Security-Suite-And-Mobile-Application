@@ -105,4 +105,27 @@
         </field>
     </record>
 
+
+    <!--
+        Where else this person may legitimately punch from.
+
+        Placed directly under Work Location rather than in a tab of its own,
+        because the two answer one question between them and somebody setting
+        the first needs to see immediately that the second exists. A multi-site
+        employee configured with only the first is refused two days a week.
+    -->
+    <record id="view_employee_form_attendance_locations" model="ir.ui.view">
+        <field name="name">hr.employee.form.attendance.locations</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <field name="work_location_id" position="after">
+                <field name="attendance_location_ids"
+                       widget="many2many_tags"
+                       options="{'no_create': True}"
+                       placeholder="e.g. Branch office, client site"/>
+            </field>
+        </field>
+    </record>
+
 </odoo>

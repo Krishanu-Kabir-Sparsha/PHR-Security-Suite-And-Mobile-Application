@@ -8,6 +8,7 @@ import '../../../core/networking/connectivity_service.dart';
 import '../../dashboard/application/employee_home_providers.dart';
 import '../data/attendance_repository.dart';
 import '../domain/attendance_overview.dart';
+import '../domain/offsite_request.dart';
 import '../../../core/security/punch_location_service.dart';
 
 final attendanceRepositoryProvider = Provider<AttendanceRepository>((ref) {
@@ -64,26 +65,37 @@ class AttendanceToggleController extends AsyncNotifier<AttendanceToggleResult?> 
   @override
   Future<AttendanceToggleResult?> build() async => null;
 
+  /// Where the handset was when the last punch was refused.
+  ///
+  /// Held so that an approval request carries the position the employee was
+  /// standing at when they tried, not wherever they happen to be by the time
+  /// they finish typing. A manager judging "was this person at a client site
+  /// at 9am?" needs the 9am position, and a phone moves.
+  PunchLocation? _refusedAt;
+
   /// Returns the result on success, or null when it failed — in which case the
   /// error is held in [state] for the screen to render.
   ///
-  /// [offSiteReason] is sent only on a second attempt, after the server has
-  /// said the punch looks far from the employee's work location and the user
-  /// has explained why. Its presence turns a refusal into a flagged
-  /// acceptance; see `models/attendance_geofence.py`.
-  Future<AttendanceToggleResult?> toggle({String? offSiteReason}) async {
+  /// There is no reason parameter any more. A reason used to be resent with
+  /// the punch and the punch accepted on the strength of it, which meant the
+  /// employee authorised their own exception. Being refused now leads to
+  /// [submitOffsiteRequest], which records nothing until a manager agrees.
+  Future<AttendanceToggleResult?> toggle() async {
     state = const AsyncValue.loading();
     try {
-      // Best effort, always. A location failure must never stop a punch —
-      // this returns null for a denied permission, a disabled radio or a
-      // timeout, and the server reads an absent fix as "nothing to check".
+      // Best effort, always. The phone sends whatever it has; the SERVER
+      // decides whether that is enough. Under ENFORCE a missing fix is
+      // refused — which is the point, since otherwise declining the location
+      // permission would be the way around the rule — but that judgement is
+      // not the client's to make, and a client that filtered its own fixes
+      // would be a client that could flatter them.
       final where = await ref.read(punchLocationServiceProvider).current();
+      _refusedAt = where;
 
       final result = await ref.read(attendanceRepositoryProvider).toggle(
             latitude: where?.latitude,
             longitude: where?.longitude,
             accuracyMetres: where?.accuracyMetres,
-            offSiteReason: offSiteReason,
           );
       state = AsyncValue.data(result);
 
@@ -98,6 +110,39 @@ class AttendanceToggleController extends AsyncNotifier<AttendanceToggleResult?> 
       // Held rather than rethrown so the screen can render this failure's own
       // user message. ApiClient guarantees an AppFailure, so nothing technical
       // can reach the user from here.
+      state = AsyncValue.error(error, stack);
+      return null;
+    }
+  }
+
+
+  /// Ask a manager to accept the check-in the location rule just refused.
+  ///
+  /// Returns the request on success, or null — in which case [state] holds the
+  /// failure for the screen. Deliberately separate from [toggle]: nothing is
+  /// recorded here, and conflating "I punched in" with "I asked to be allowed
+  /// to punch in" is how the earlier design ended up letting people wave
+  /// themselves through.
+  ///
+  /// Sends the position captured when the punch was refused rather than a
+  /// fresh one, so what the manager judges is where the employee was when
+  /// they tried.
+  Future<OffsiteRequest?> submitOffsiteRequest(String reason) async {
+    state = const AsyncValue.loading();
+    try {
+      final where = _refusedAt;
+      final request = await ref
+          .read(attendanceRepositoryProvider)
+          .submitOffsiteRequest(
+            reason: reason,
+            latitude: where?.latitude,
+            longitude: where?.longitude,
+            accuracyMetres: where?.accuracyMetres,
+          );
+      state = const AsyncValue.data(null);
+      ref.invalidate(offsiteRequestProvider);
+      return request;
+    } catch (error, stack) {
       state = AsyncValue.error(error, stack);
       return null;
     }
@@ -156,4 +201,14 @@ final attendanceFailureProvider = Provider<AppFailure?>((ref) {
   final state = ref.watch(attendanceProvider);
   final error = state.error;
   return error == null ? null : asAppFailure(error, state.stackTrace);
+});
+
+/// The employee's most recent off-site approval request, if any.
+///
+/// autoDispose so returning to the screen re-reads it: the whole value of this
+/// is telling somebody their manager has decided, and a cached "pending" would
+/// do the opposite.
+final offsiteRequestProvider =
+    FutureProvider.autoDispose<OffsiteRequest?>((ref) {
+  return ref.watch(attendanceRepositoryProvider).loadOffsiteRequest();
 });

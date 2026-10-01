@@ -4,3 +4,6 @@ access_mobile_token_admin,perfecthr.mobile.token administrator,model_perfecthr_m
 access_mobile_pending_auth_admin,perfecthr.mobile.pending.auth administrator,model_perfecthr_mobile_pending_auth,base.group_system,1,1,1,1
 access_attendance_break_user,hr.attendance.break own breaks,model_hr_attendance_break,base.group_user,1,0,0,0
 access_attendance_break_officer,hr.attendance.break HR officer,model_hr_attendance_break,hr.group_hr_user,1,1,1,1
+access_offsite_request_user,hr.attendance.offsite.request own,model_hr_attendance_offsite_request,base.group_user,1,0,1,0
+access_offsite_request_officer,hr.attendance.offsite.request officer,model_hr_attendance_offsite_request,hr.group_hr_user,1,1,1,0
+access_offsite_request_manager,hr.attendance.offsite.request manager,model_hr_attendance_offsite_request,hr.group_hr_manager,1,1,1,1

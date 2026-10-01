@@ -8,6 +8,7 @@ import 'package:perfect_hr_mobile/core/security/punch_location_service.dart';
 import 'package:perfect_hr_mobile/features/attendance/application/attendance_providers.dart';
 import 'package:perfect_hr_mobile/features/attendance/data/attendance_repository.dart';
 import 'package:perfect_hr_mobile/features/attendance/domain/attendance_overview.dart';
+import 'package:perfect_hr_mobile/features/attendance/domain/offsite_request.dart';
 import 'package:perfect_hr_mobile/features/dashboard/domain/employee_home_summary.dart';
 
 /// Where a punch was made, and what happens when the server says "not here".
@@ -31,6 +32,7 @@ class _RecordingRepository implements AttendanceRepository {
 
   int toggleCount = 0;
   int breakCount = 0;
+  int offsiteCount = 0;
   double? sentLatitude;
   double? sentLongitude;
   double? sentAccuracy;
@@ -41,21 +43,47 @@ class _RecordingRepository implements AttendanceRepository {
     double? latitude,
     double? longitude,
     double? accuracyMetres,
-    String? offSiteReason,
   }) async {
     toggleCount++;
     sentLatitude = latitude;
     sentLongitude = longitude;
     sentAccuracy = accuracyMetres;
-    sentReason = offSiteReason;
-    // Only the FIRST attempt fails, so a retry carrying a reason succeeds --
-    // which is exactly the server's behaviour.
-    if (failure != null && offSiteReason == null) throw failure!;
+    // Every attempt fails while the stub holds a failure. There is no longer
+    // a "second attempt with a reason" that succeeds -- that was the whole
+    // defect, see the group below.
+    if (failure != null) throw failure!;
     return AttendanceToggleResult(
       checkedIn: true,
       today: const TodayAttendance(state: AttendanceState.checkedIn),
     );
   }
+
+
+  @override
+  Future<OffsiteRequest> submitOffsiteRequest({
+    required String reason,
+    double? latitude,
+    double? longitude,
+    double? accuracyMetres,
+  }) async {
+    offsiteCount++;
+    sentReason = reason;
+    sentLatitude = latitude;
+    sentLongitude = longitude;
+    sentAccuracy = accuracyMetres;
+    return OffsiteRequest(
+      id: 'req-1',
+      state: OffsiteRequestState.pending,
+      requestedAt: DateTime.now(),
+      reason: reason,
+      distanceMetres: 1100,
+      locationName: 'Head Office',
+      manager: 'Ayesha Rahman',
+    );
+  }
+
+  @override
+  Future<OffsiteRequest?> loadOffsiteRequest() async => null;
 
   @override
   Future<AttendanceToggleResult> toggleBreak({String? breakType}) async {
@@ -198,9 +226,19 @@ void main() {
       expect((held! as AppFailure).code, 'off_site');
     });
 
-    test('sending a reason gets the punch accepted', () async {
-      // The appeal path. Nobody is left unable to start work, and the reason
-      // travels with the record for HR.
+    test('a reason creates a REQUEST and records no attendance', () async {
+      // This replaces a test that asserted the opposite, and the change is the
+      // point of the whole feature.
+      //
+      // The old behaviour: refused, the app asked why, the same punch was
+      // resent carrying a reason, and the server accepted it and flagged it.
+      // That made the employee the authoriser of their own exception -- the
+      // radius stopped nobody willing to type a sentence, which is a prompt,
+      // not a control.
+      //
+      // Now the reason goes to a manager and NOTHING is recorded until they
+      // decide. So the assertions are: a request was made, and the punch was
+      // not retried.
       final repository = _RecordingRepository(failure: offSite());
       final container = _container(
         repository,
@@ -211,13 +249,39 @@ void main() {
       addTearDown(container.dispose);
 
       await container.read(attendanceToggleProvider.notifier).toggle();
-      final second = await container
+      final request = await container
           .read(attendanceToggleProvider.notifier)
-          .toggle(offSiteReason: 'Client visit at Gulshan');
+          .submitOffsiteRequest('Client visit at Gulshan');
 
-      expect(second, isNotNull);
+      expect(request, isNotNull);
+      expect(request!.state, OffsiteRequestState.pending);
       expect(repository.sentReason, 'Client visit at Gulshan');
-      expect(repository.toggleCount, 2);
+      expect(repository.offsiteCount, 1);
+      // THE assertion. A second toggle here would mean the punch had been
+      // retried, which is exactly what must not happen any more.
+      expect(repository.toggleCount, 1);
+    });
+
+    test('the request carries where they were when refused', () async {
+      // Not where they are by the time they finish typing. A manager judging
+      // "was this person at a client site at 9am?" needs the 9am position,
+      // and a phone moves while somebody writes a sentence.
+      final repository = _RecordingRepository(failure: offSite());
+      final container = _container(
+        repository,
+        const _FixedLocation(
+          PunchLocation(latitude: 23.9, longitude: 90.4, accuracyMetres: 12),
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await container.read(attendanceToggleProvider.notifier).toggle();
+      await container
+          .read(attendanceToggleProvider.notifier)
+          .submitOffsiteRequest('Client visit');
+
+      expect(repository.sentLatitude, 23.9);
+      expect(repository.sentAccuracy, 12);
     });
   });
 

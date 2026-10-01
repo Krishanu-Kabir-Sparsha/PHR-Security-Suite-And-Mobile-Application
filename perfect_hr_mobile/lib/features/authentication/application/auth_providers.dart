@@ -12,6 +12,7 @@ import '../../../core/security/passkey_service.dart';
 import '../domain/auth_session.dart';
 import '../domain/sign_in_outcome.dart';
 import '../../../core/tenant/tenant_providers.dart';
+import '../../../core/security/punch_location_service.dart';
 
 /// Uses [authApiClientProvider], never [apiClientProvider].
 ///
@@ -109,6 +110,7 @@ class SignInController extends AsyncNotifier<void> {
             deviceLabel: deviceLabel,
             companyId: companyId,
             authMode: authMode,
+            position: await _position(),
           );
 
       final session = switch (outcome) {
@@ -146,6 +148,7 @@ class SignInController extends AsyncNotifier<void> {
       return await ref.read(authRepositoryProvider).completeSignInWithDevice(
             mfaToken: challenge.mfaToken,
             signaturePayload: signature.toJson(),
+            position: await _position(),
           );
     } on DeviceKeyFailure catch (failure) {
       if (failure.kind == DeviceKeyFailureKind.cancelled) {
@@ -195,6 +198,7 @@ class SignInController extends AsyncNotifier<void> {
       return await ref.read(authRepositoryProvider).completeSignIn(
             mfaToken: challenge.mfaToken,
             assertion: assertion,
+            position: await _position(),
           );
     } on PasskeyFailure catch (failure) {
       if (failure.isCancellation) {
@@ -233,6 +237,31 @@ class SignInController extends AsyncNotifier<void> {
     // tell somebody they had just been checked in when they had not.
     ref.read(lastSignInAttendanceProvider.notifier).state = session.attendance;
     state = const AsyncValue.data(null);
+  }
+
+
+  /// Where this handset is, as a request body fragment, or null.
+  ///
+  /// Captured on every sign-in because signing in checks the employee in. A
+  /// location failure never stops the SIGN-IN -- being unable to prove where
+  /// you are must not mean being unable to open the app -- but under the
+  /// ENFORCE rule it will stop the automatic check-in, and the server says so
+  /// in the sign-in response rather than leaving it to be discovered.
+  Future<Map<String, Object?>?> _position() async {
+    try {
+      final where = await ref.read(punchLocationServiceProvider).current();
+      if (where == null) return null;
+      return {
+        'latitude': where.latitude,
+        'longitude': where.longitude,
+        if (where.accuracyMetres != null) 'accuracy_m': where.accuracyMetres,
+      };
+    } catch (_) {
+      // A platform channel failure on an odd handset. Signing in matters more
+      // than locating, so this is swallowed and the server reads it as "no
+      // position offered".
+      return null;
+    }
   }
 
   Future<void> signOut() async {

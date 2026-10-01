@@ -345,6 +345,33 @@ class MobileAuth(http.Controller):
             "user": self._session_user(user, record.company_id),
         }
 
+    @staticmethod
+    def _request_position():
+        """Where the handset says it is, from whichever call completes sign-in.
+
+        Read from the request rather than threaded through every caller: four
+        separate paths end in a completed sign-in, and a parameter added to
+        three of them would leave the fourth silently unlocated -- which under
+        ENFORCE reads as "no fix" and refuses the check-in for a reason nobody
+        could find.
+
+        Absent keys are fine. They mean the client sent no position, which the
+        location gate treats as exactly that.
+        """
+        data = _payload() or {}
+
+        def number(key):
+            try:
+                return float(data.get(key))
+            except (TypeError, ValueError):
+                return None
+
+        return {
+            "latitude": number("latitude"),
+            "longitude": number("longitude"),
+            "accuracy_m": number("accuracy_m"),
+        }
+
     def _complete_sign_in(self, user, company, auth_mode, device_label,
                           enrolment_required=False):
         """Issue the session and record attendance. The end of every path."""
@@ -375,6 +402,7 @@ class MobileAuth(http.Controller):
                     company=company,
                     source_ip=current_ip(),
                     auth_mode=auth_mode,
+                    position=self._request_position(),
                 )
             )
         return self._token_response(record, access, refresh, user, attendance)

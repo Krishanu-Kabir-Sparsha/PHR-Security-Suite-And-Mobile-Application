@@ -49,7 +49,7 @@
     #   * the migration turns on Odoo's own auto_check_out for companies using
     #     mobile attendance. Left off, one forgotten check-out blocks every
     #     later check-in at the overlap constraint.
-    "version": "18.0.1.15.0",
+    "version": "18.0.1.16.0",
     "category": "Human Resources",
     "license": "AGPL-3",
     "author": "Internal Security Programme",
@@ -76,9 +76,11 @@
         "security/ir.model.access.csv",
         "security/mobile_token_rules.xml",
         "security/attendance_break_rules.xml",
+        "security/offsite_request_rules.xml",
         "data/ir_cron.xml",
         "views/res_company_views.xml",
         "views/attendance_views.xml",
+        "views/offsite_request_views.xml",
         "views/mobile_menus.xml",
     ],
     "installable": True,

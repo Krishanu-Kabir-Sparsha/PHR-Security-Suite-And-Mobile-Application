@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!--
+        The ACL grants every internal user read on the off-site requests so the
+        app can show somebody the state of their own. On its own that would
+        also let them read everyone else's, which is a record of where each of
+        their colleagues was standing and what they said about it. The first
+        rule scopes it to the subject.
+
+        HR officers get the whole table through the second rule, because
+        deciding these is the job, and a request they cannot see is one nobody
+        can approve.
+
+        Note what the ACL does NOT grant an ordinary user: write. A request the
+        subject could edit after submitting would not be evidence of anything,
+        and "approve" is a write. Mirrors attendance_break_rules.xml.
+    -->
+    <record id="rule_offsite_request_own" model="ir.rule">
+        <field name="name">Off-site check-in: own requests only</field>
+        <field name="model_id" ref="model_hr_attendance_offsite_request"/>
+        <field name="domain_force">[('employee_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <record id="rule_offsite_request_officer" model="ir.rule">
+        <field name="name">Off-site check-in: HR sees all</field>
+        <field name="model_id" ref="model_hr_attendance_offsite_request"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr.group_hr_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+</odoo>

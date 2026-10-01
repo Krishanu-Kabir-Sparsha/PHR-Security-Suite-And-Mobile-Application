@@ -121,6 +121,13 @@ class MoreScreen extends ConsumerWidget {
           // Offered only where the server said there is a plan AND this user
           // administers it. Both conditions are the server's call, so an
           // ordinary employee never sees a tile that would refuse them.
+          if (ref.watch(hasFeatureProvider(AppFeature.workLocations)))
+            _MoreTile(
+              icon: Icons.my_location_outlined,
+              title: 'Work locations',
+              subtitle: 'Set where people may check in from',
+              onTap: () => context.push(AppRoutes.workLocations),
+            ),
           if (ref.watch(hasFeatureProvider(AppFeature.subscription)))
             _MoreTile(
               icon: Icons.workspace_premium_outlined,

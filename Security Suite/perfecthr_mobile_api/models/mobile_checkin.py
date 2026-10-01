@@ -46,6 +46,7 @@ import logging
 from datetime import timedelta
 
 from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -378,7 +379,8 @@ class MobileCheckin(models.AbstractModel):
     # The action
     # ------------------------------------------------------------------
     @api.model
-    def record_sign_in(self, user, company=None, source_ip=None, auth_mode=None):
+    def record_sign_in(self, user, company=None, source_ip=None,
+                       auth_mode=None, position=None):
         """Check ``user`` in if today has nothing on it yet.
 
         Returns a dict the sign-in response embeds verbatim, always with a
@@ -390,6 +392,7 @@ class MobileCheckin(models.AbstractModel):
             on_leave       approved absence covers today
             disabled       the company has auto check-in switched off
             no_employee    no hr.employee is linked to this account
+            off_site       the location rule refused it; message says why
             skipped        it could not be done; the sign-in is unaffected
 
         Never raises. See the module docstring.
@@ -428,7 +431,15 @@ class MobileCheckin(models.AbstractModel):
             # not checked in, so this method can only take its create branch.
             # It is a toggle, and calling it while checked in would check them
             # *out* -- which is why neither guard is optional.
-            attendance = employee.sudo()._attendance_action_change(
+            #
+            # The position rides in the context for the location gate in
+            # attendance_geofence.py. This is the path that most needed it:
+            # signing in to the app IS a check-in here, so a sign-in that
+            # skipped the location rule would be the way around it, and the
+            # rule would protect only the button nobody has to press.
+            attendance = employee.sudo().with_context(
+                perfecthr_punch_location=position or {}
+            )._attendance_action_change(
                 geo_information={
                     "mode": "manual",
                     "ip_address": source_ip,
@@ -437,6 +448,20 @@ class MobileCheckin(models.AbstractModel):
                 if source_ip
                 else {"mode": "manual", "browser": CHECKIN_SOURCE}
             )
+        except ValidationError as refusal:
+            # The location gate, almost certainly. Surfaced rather than
+            # swallowed: the employee has just signed in successfully and would
+            # otherwise be left to discover by accident that no attendance was
+            # recorded. The sign-in itself still succeeds -- being unable to
+            # prove where you are must not mean being unable to open the app.
+            _logger.info(
+                "Automatic check-in refused for %s: %s", user.login, refusal
+            )
+            return {
+                "status": "off_site",
+                "check_in_at": None,
+                "message": str(refusal),
+            }
         except Exception:  # noqa: BLE001 - a sign-in must never fail over this
             _logger.exception(
                 "Automatic check-in failed for %s; the sign-in itself is "

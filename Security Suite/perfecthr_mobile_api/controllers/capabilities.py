@@ -99,6 +99,22 @@ FEATURE_MATRIX = [
 # Kept out of FEATURE_MATRIX because that table is a pure (module, group) lookup
 # and folding a callable into it would make every row harder to read for the
 # sake of one exception.
+def _may_configure_locations(user):
+    """Whether to offer the work-location setup screen.
+
+    Mirrors ``MobileWorkLocation._may_configure``. Two copies of one rule is
+    one too many, but the controller cannot import this module without a
+    cycle, so the pairing is noted here instead: change one, change both.
+    """
+    for xmlid in ("base.group_system", "hr.group_hr_manager"):
+        try:
+            if user.has_group(xmlid):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _subscription_visible(user):
     """Whether to offer the Subscription screen at all.
 
@@ -494,6 +510,13 @@ class MobileCapabilities(http.Controller):
 
         if _subscription_visible(user):
             features.append("subscription")
+
+        # Placing a work location writes the rule that decides whether everyone
+        # else can start work, so it is gated exactly as the endpoint is rather
+        # than on a near-enough admin flag. An HR manager who is not a system
+        # administrator can do this and must therefore see it.
+        if _may_configure_locations(user):
+            features.append("work_locations")
 
         employee = request_employee()
         company = request_company()

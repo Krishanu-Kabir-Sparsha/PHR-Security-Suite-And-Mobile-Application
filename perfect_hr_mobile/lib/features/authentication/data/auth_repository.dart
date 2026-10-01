@@ -17,6 +17,7 @@ abstract interface class AuthRepository {
     String? deviceLabel,
     String? companyId,
     String? authMode,
+    Map<String, Object?>? position,
   });
 
   /// Move an existing session to another of the user's companies.
@@ -39,12 +40,14 @@ abstract interface class AuthRepository {
   Future<AuthSession> completeSignIn({
     required String mfaToken,
     required Map<String, dynamic> assertion,
+    Map<String, Object?>? position,
   });
 
   /// Complete a sign-in with a signature from this installation's paired key.
   Future<AuthSession> completeSignInWithDevice({
     required String mfaToken,
     required Map<String, dynamic> signaturePayload,
+    Map<String, Object?>? position,
   });
 
   /// Bind this installation to an account using a code from the web.
@@ -105,6 +108,7 @@ class ApiAuthRepository implements AuthRepository {
     String? deviceLabel,
     String? companyId,
     String? authMode,
+    Map<String, Object?>? position,
   }) async {
     final body = await _client.post<Map<String, dynamic>>(
       '/auth/login',
@@ -121,6 +125,9 @@ class ApiAuthRepository implements AuthRepository {
         // which is the correct behaviour for a single-company tenant.
         if (companyId != null && companyId.isNotEmpty) 'company_id': companyId,
         if (authMode != null && authMode.isNotEmpty) 'auth_mode': authMode,
+        // Signing in checks the employee in, so the location rule judges this
+        // call exactly as it judges the Check In button.
+        ...?position,
       },
     );
     if (body['mfa_required'] == true) {
@@ -134,10 +141,11 @@ class ApiAuthRepository implements AuthRepository {
   Future<AuthSession> completeSignIn({
     required String mfaToken,
     required Map<String, dynamic> assertion,
+    Map<String, Object?>? position,
   }) async {
     final body = await _client.post<Map<String, dynamic>>(
       '/auth/login/webauthn',
-      data: {'mfa_token': mfaToken, 'assertion': assertion},
+      data: {'mfa_token': mfaToken, 'assertion': assertion, ...?position},
     );
     return AuthSession.fromJson(body);
   }
@@ -147,10 +155,15 @@ class ApiAuthRepository implements AuthRepository {
   Future<AuthSession> completeSignInWithDevice({
     required String mfaToken,
     required Map<String, dynamic> signaturePayload,
+    Map<String, Object?>? position,
   }) async {
     final body = await _client.post<Map<String, dynamic>>(
       '/auth/login/device',
-      data: {'mfa_token': mfaToken, 'signature_payload': signaturePayload},
+      data: {
+        'mfa_token': mfaToken,
+        'signature_payload': signaturePayload,
+        ...?position,
+      },
     );
     return AuthSession.fromJson(body);
   }
